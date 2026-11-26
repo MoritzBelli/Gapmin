@@ -192,7 +192,7 @@ fun HealthScreen(
                 weekday = { Fmt.weekdayLetter(it.date) },
             )
         }
-        item(key = "day") { DayCard(d, selected == 0, loadDay) }
+        item(key = "day") { DayCard(d, d.date == LocalDate.now().toString(), loadDay) }
         item(key = "hrv") { HrvCard(days, selected) }
         item(key = "heart") { MetricGroup("Herz-Kreislauf", HEART_DEFS, days, selected, dayDate, dayIndex) }
         item(key = "stress") { MetricGroup("Stress & Body Battery", STRESS_DEFS, days, selected, dayDate, dayIndex) }
@@ -360,7 +360,7 @@ private fun StressDistribution(d: HealthDay) {
         Triple("Hoch", d.stressHigh, G.stressHigh),
     )
     if (parts.all { it.second == null }) return
-    Label("Stressverteilung (Anteil der Messungen, n = ${d.stressN})")
+    Label("Stressverteilung · n = ${d.stressN}")
     Spacer(Modifier.height(G.s2))
     Row(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(G.surface3)) {
         for ((_, v, c) in parts) {
@@ -397,7 +397,7 @@ private fun HrvCard(days: List<HealthDay>, selected: Int) {
     GCard(Modifier.pressable({ open = !open })) {
         CardHead("HRV-Status", hrvStatus(d.hrvStatus))
         Row(Modifier.fillMaxWidth()) {
-            Kpi("Letzte Nacht", Fmt.num(d.hrvNight), "ms", Modifier.weight(1f))
+            Kpi("Nacht", Fmt.num(d.hrvNight), "ms", Modifier.weight(1f))
             Kpi("7-Tage-Ø", Fmt.num(d.hrvWeekly), "ms", Modifier.weight(1f))
             Kpi("Normalbereich", if (d.hrvLow != null && d.hrvHigh != null) "${Fmt.num(d.hrvLow)}–${Fmt.num(d.hrvHigh)}" else "–", "ms", Modifier.weight(1.3f))
         }
