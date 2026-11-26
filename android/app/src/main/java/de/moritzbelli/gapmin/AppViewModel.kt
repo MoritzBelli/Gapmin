@@ -7,7 +7,10 @@ import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import de.moritzbelli.gapmin.core.DaySeries
 import de.moritzbelli.gapmin.core.Fmt
+import de.moritzbelli.gapmin.core.Health
+import de.moritzbelli.gapmin.core.HealthDay
 import de.moritzbelli.gapmin.core.GadgetbridgeImport
 import de.moritzbelli.gapmin.core.ImportProgress
 import de.moritzbelli.gapmin.core.Repo
@@ -33,6 +36,7 @@ data class UiState(
     val loaded: Boolean = false,
     val runs: List<RunSummary> = emptyList(),
     val nights: List<SleepNight> = emptyList(),
+    val days: List<HealthDay> = emptyList(),
     val stats: Stats = Stats(0, 0, 0, null, null),
     val busy: ImportProgress? = null,
     val notice: Notice? = null,
@@ -58,6 +62,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 loaded = true,
                 runs = Repo.listRuns(sql),
                 nights = Repo.listNights(sql),
+                days = Health.listDays(sql),
                 stats = Repo.stats(sql),
                 nasUrl = Repo.getSetting(sql, "nas_url"),
                 nasToken = Repo.getSetting(sql, "nas_token"),
@@ -70,6 +75,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun track(id: String, onResult: (List<TrackSample>) -> Unit) {
         viewModelScope.launch { onResult(db.use { Repo.track(it, id) }) }
+    }
+
+    fun daySeries(date: String, onResult: (DaySeries) -> Unit) {
+        viewModelScope.launch { onResult(db.use { Health.daySeries(it, date) }) }
     }
 
     fun dismissNotice() = _state.update { it.copy(notice = null) }

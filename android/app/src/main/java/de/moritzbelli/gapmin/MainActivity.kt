@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             GapminTheme {
                 val state = vm.state.collectAsStateWithLifecycle().value
-                GapminApp(state, actions, vm::track, vm::dismissNotice)
+                GapminApp(state, actions, vm::track, vm::daySeries, vm::dismissNotice)
             }
         }
     }

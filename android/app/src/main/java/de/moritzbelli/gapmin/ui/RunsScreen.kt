@@ -95,8 +95,7 @@ fun RunsScreen(
             contentPadding = PaddingValues(start = G.s4, end = G.s4, bottom = bottomPadding),
         ) {
             item(key = "hero") {
-                Hero(
-                    "Aktivitäten", "Läufe",
+                Totals(
                     listOf(
                         Triple("Läufe", visible.size.toString(), ""),
                         Triple("Distanz", Fmt.km(dist, 0), "km"),

@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import de.moritzbelli.gapmin.UiState
 import de.moritzbelli.gapmin.core.GadgetbridgeImport
+import de.moritzbelli.gapmin.core.Health
 import de.moritzbelli.gapmin.core.JdbcSql
 import de.moritzbelli.gapmin.core.Repo
 import de.moritzbelli.gapmin.core.Schema
@@ -27,19 +28,21 @@ import java.io.File
 class ScreenshotTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
+    private lateinit var db: de.moritzbelli.gapmin.core.Sql
+
     private val state: UiState by lazy {
         val demo = listOf("../../web/public/demo/gadgetbridge-demo.zip", "../web/public/demo/gadgetbridge-demo.zip").map(::File).first { it.exists() }
-        val db = JdbcSql.open(null)
+        db = JdbcSql.open(null)
         Schema.migrate(db)
         GadgetbridgeImport(db, { JdbcSql.open(it, readOnly = true) }, File(System.getProperty("java.io.tmpdir"), "gapmin-shot")).run(demo)
-        UiState(loaded = true, runs = Repo.listRuns(db), nights = Repo.listNights(db), stats = Repo.stats(db))
+        UiState(loaded = true, runs = Repo.listRuns(db), nights = Repo.listNights(db), days = Health.listDays(db, 100_000), stats = Repo.stats(db))
     }
 
     private val actions = DataActions({}, {}, {}, { _, _, _ -> }, {}, {})
 
     private fun shot(name: String, tab: Tab, run: String? = null) {
         compose.setContent {
-            GapminTheme { GapminApp(state, actions, { _, cb -> cb(emptyList()) }, {}, initialTab = tab, initialRun = run) }
+            GapminTheme { GapminApp(state, actions, { _, cb -> cb(emptyList()) }, { d, cb -> cb(Health.daySeries(db, d)) }, {}, initialTab = tab, initialRun = run) }
         }
         compose.mainClock.advanceTimeBy(3000)
         compose.waitForIdle()
@@ -53,5 +56,6 @@ class ScreenshotTest {
     @Test fun runs() = shot("1-laeufe", Tab.RUNS)
     @Test fun detail() = shot("2-lauf-detail", Tab.RUNS, state.runs.first().id)
     @Test fun sleep() = shot("3-schlaf", Tab.SLEEP)
-    @Test fun data() = shot("4-daten", Tab.DATA)
+    @Test fun health() = shot("4-health", Tab.HEALTH)
+    @Test fun data() = shot("5-daten", Tab.DATA)
 }

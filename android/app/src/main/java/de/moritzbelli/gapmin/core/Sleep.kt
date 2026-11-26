@@ -216,80 +216,113 @@ object Sleep {
 
     private fun fmtH(min: Double) = "${floor(min / 60).toInt()}:${(min % 60).roundToInt().toString().padStart(2, '0')} h"
 
-    fun scoreNight(m: NightMetrics, p: NightPhysiology, b: Baselines, r: Regularity): ScoreResult {
-        val notes = HashMap<Component, String>()
+    /** Sub-score of one input; `share` is its weight inside the component. */
+    data class PartScore(val component: Component, val key: String, val label: String, val share: Double, val score: Double?)
 
-        // Dauer (AASM/NSF: 7-9 h)
-        val tstH = m.tstMin / 60
+    class PartInput(
+        val tstMin: Double, val efficiency: Double, val wasoMin: Double, val awakeningsLong: Int, val solMin: Double,
+        val deepMin: Double, val lightMin: Double, val remMin: Double,
+        val hrvAvg: Double?, val hrAvg: Double?, val stressAvg: Double?, val respAvg: Double?, val spo2Avg: Double?,
+        val regularityNights: Int, val regularitySpread: Double?, val b: Baselines,
+    )
+
+    /** z of ln(nightly HRV) against the personal 28-night baseline (needs 7 nights). */
+    fun hrvZ(hrvAvg: Double?, b: Baselines): Double? =
+        if (hrvAvg != null && hrvAvg > 0 && b.nights >= 7 && b.lnHrvMean != null && b.lnHrvSd != null && b.lnHrvSd != 0.0) {
+            (ln(hrvAvg) - b.lnHrvMean) / max(b.lnHrvSd, 0.03)
+        } else {
+            null
+        }
+
+    /** All sub-scores (0-100) of the GSS, see docs/research/schlaf-score.md §2.2. */
+    fun parts(x: PartInput): List<PartScore> {
+        val personal = x.b.nights >= 7
+        val tstH = x.tstMin / 60
         val duration = if (tstH < 7) ramp(tstH, 4.0, 7.0) else if (tstH <= 9) 100.0 else interp(tstH, 9.0 to 100.0, 11.0 to 80.0)
-        notes[Component.DURATION] = if (tstH < 7) "Kurz geschlafen (${fmtH(m.tstMin)})" else "Lang geschlafen (${fmtH(m.tstMin)})"
 
-        // Kontinuität (NSF 2017)
-        val se = ramp(m.efficiency * 100, 70.0, 90.0)
-        val waso = ramp(-m.wasoMin, -60.0, -10.0)
-        val wake = interp(m.awakeningsLong.toDouble(), 1.0 to 100.0, 2.0 to 70.0, 3.0 to 40.0, 4.0 to 10.0)
-        val sol = ramp(-m.solMin, -60.0, -15.0)
-        val continuity = 0.4 * se + 0.3 * waso + 0.2 * wake + 0.1 * sol
+        val z = hrvZ(x.hrvAvg, x.b)
+        val hrv = when {
+            x.hrvAvg == null -> null
+            z != null -> interp(z, -2.0 to 0.0, -1.0 to 45.0, 0.0 to 80.0, 0.5 to 100.0)
+            else -> ramp(x.hrvAvg, 20.0, 60.0) // grob, bis eine Baseline existiert
+        }
+        val hr = when {
+            x.hrAvg == null -> null
+            personal && x.b.hrMean != null -> interp(x.hrAvg - x.b.hrMean, 0.0 to 100.0, 3.0 to 70.0, 6.0 to 35.0, 9.0 to 0.0)
+            else -> ramp(-x.hrAvg, -75.0, -50.0)
+        }
+        val stress = x.stressAvg?.let { ramp(-it, -40.0, -10.0) }
+
+        fun pct(v: Double) = if (x.tstMin > 0) v / x.tstMin * 100 else 0.0
+        fun band(v: Double, lo: Double, hi: Double, k: Double) = max(0.0, 100 - k * (if (v < lo) lo - v else if (v > hi) v - hi else 0.0))
+
+        val reg = if (x.regularityNights >= 3 && x.regularitySpread != null) ramp(-x.regularitySpread, -90.0, -20.0) else null
+        val resp = x.respAvg?.let {
+            if (personal && x.b.respMean != null) interp(abs(it - x.b.respMean), 1.0 to 100.0, 3.0 to 40.0, 4.0 to 0.0)
+            else if (it in 11.8..19.2) 100.0 else 50.0
+        }
+        val spo2 = x.spo2Avg?.let { interp(it, 90.0 to 0.0, 92.0 to 40.0, 95.0 to 100.0) }
+
+        val third = 1.0 / 3
+        return listOf(
+            PartScore(Component.DURATION, "tst", "Gesamtschlafzeit (TST)", 1.0, duration),
+            PartScore(Component.CONTINUITY, "se", "Schlafeffizienz (SE)", 0.4, ramp(x.efficiency * 100, 70.0, 90.0)),
+            PartScore(Component.CONTINUITY, "waso", "Wach nach Einschlafen (WASO)", 0.3, ramp(-x.wasoMin, -60.0, -10.0)),
+            PartScore(Component.CONTINUITY, "wake", "Aufwachphasen > 5 min", 0.2, interp(x.awakeningsLong.toDouble(), 1.0 to 100.0, 2.0 to 70.0, 3.0 to 40.0, 4.0 to 10.0)),
+            PartScore(Component.CONTINUITY, "sol", "Einschlaflatenz (SOL)", 0.1, ramp(-x.solMin, -60.0, -15.0)),
+            PartScore(Component.RECOVERY, "hrv", "HRV, ln RMSSD (z)", 0.5, hrv),
+            PartScore(Component.RECOVERY, "hr", "Schlafpuls (Δ zum Mittel)", 0.3, hr),
+            PartScore(Component.RECOVERY, "stress", "Stress im Schlaf", 0.2, stress),
+            PartScore(Component.STAGES, "deep", "Tiefschlaf-Anteil", third, band(pct(x.deepMin), 13.0, 23.0, 6.0)),
+            PartScore(Component.STAGES, "rem", "REM-Anteil", third, band(pct(x.remMin), 18.0, 26.0, 5.0)),
+            PartScore(Component.STAGES, "light", "Leichtschlaf-Anteil", third, band(pct(x.lightMin), 0.0, 65.0, 4.0)),
+            PartScore(Component.REGULARITY, "reg", "Streuung Einschlaf-/Aufwachzeit", 1.0, reg),
+            PartScore(Component.BREATHING, "resp", "Atemfrequenz", 0.6, resp),
+            PartScore(Component.BREATHING, "spo2", "SpO2", 0.4, spo2),
+        )
+    }
+
+    fun componentScores(ps: List<PartScore>): Map<Component, Double?> {
+        val out = LinkedHashMap<Component, Double?>()
+        for (c in Component.entries) out[c] = weighted(*ps.filter { it.component == c }.map { it.score to it.share }.toTypedArray())
+        return out
+    }
+
+    fun scoreNight(m: NightMetrics, p: NightPhysiology, b: Baselines, r: Regularity): ScoreResult {
+        val ps = parts(
+            PartInput(
+                m.tstMin, m.efficiency, m.wasoMin, m.awakeningsLong, m.solMin, m.deepMin, m.lightMin, m.remMin,
+                p.hrvAvg, p.hrAvg, p.stressAvg, p.respAvg, p.spo2Avg, r.nights, r.spreadMin, b,
+            ),
+        )
+        val components = componentScores(ps)
+        val personal = b.nights >= 7
+
+        val notes = HashMap<Component, String>()
+        notes[Component.DURATION] = if (m.tstMin < 420) "Kurz geschlafen (${fmtH(m.tstMin)})" else "Lang geschlafen (${fmtH(m.tstMin)})"
         notes[Component.CONTINUITY] = when {
             m.wasoMin > 20 -> "${m.wasoMin.roundToInt()} min wach nach dem Einschlafen"
             m.awakeningsLong > 1 -> "${m.awakeningsLong}× länger wach"
             else -> "Schlafeffizienz ${(m.efficiency * 100).roundToInt()} %"
         }
-
-        // Autonome Erholung (individuelle Baseline, Plews: SWC ≈ 0,5 SD)
-        val personal = b.nights >= 7
-        var hrvScore: Double? = null
-        if (p.hrvAvg != null) {
-            if (personal && b.lnHrvMean != null && b.lnHrvSd != null && b.lnHrvSd != 0.0) {
-                val z = (ln(p.hrvAvg) - b.lnHrvMean) / max(b.lnHrvSd, 0.03)
-                hrvScore = interp(z, -2.0 to 0.0, -1.0 to 45.0, 0.0 to 80.0, 0.5 to 100.0)
-                val pct = ((p.hrvAvg / exp(b.lnHrvMean) - 1) * 100).roundToInt()
-                notes[Component.RECOVERY] = if (pct < 0) "HRV ${-pct} % unter deinem Normal" else "HRV $pct % über deinem Normal"
-            } else {
-                hrvScore = ramp(p.hrvAvg, 20.0, 60.0) // grob, bis eine Baseline existiert
-            }
+        if (hrvZ(p.hrvAvg, b) != null) {
+            val pct = ((p.hrvAvg!! / exp(b.lnHrvMean!!) - 1) * 100).roundToInt()
+            notes[Component.RECOVERY] = if (pct < 0) "HRV ${-pct} % unter deinem Normal" else "HRV $pct % über deinem Normal"
         }
-        var hrScore: Double? = null
-        if (p.hrAvg != null) {
-            if (personal && b.hrMean != null) {
-                val delta = p.hrAvg - b.hrMean
-                hrScore = interp(delta, 0.0 to 100.0, 3.0 to 70.0, 6.0 to 35.0, 9.0 to 0.0)
-                if (delta > 3) notes[Component.RECOVERY] = "Schlafpuls ${"%.0f".format(delta)} bpm über Normal"
-            } else {
-                hrScore = ramp(-p.hrAvg, -75.0, -50.0)
-            }
+        if (personal && p.hrAvg != null && b.hrMean != null && p.hrAvg - b.hrMean > 3) {
+            notes[Component.RECOVERY] = "Schlafpuls ${"%.0f".format(p.hrAvg - b.hrMean)} bpm über Normal"
         }
-        val stressScore = p.stressAvg?.let { ramp(-it, -40.0, -10.0) }
-        val recovery = weighted(hrvScore to 0.5, hrScore to 0.3, stressScore to 0.2)
         if (notes[Component.RECOVERY] == null) {
             notes[Component.RECOVERY] = p.stressAvg?.let { "Stress im Schlaf ${it.roundToInt()}" } ?: "Erholung"
         }
-
-        // Phasen (geringe Messgenauigkeit, daher Bänder)
-        fun pct(x: Double) = if (m.tstMin > 0) x / m.tstMin * 100 else 0.0
-        fun band(x: Double, lo: Double, hi: Double, k: Double) = max(0.0, 100 - k * (if (x < lo) lo - x else if (x > hi) x - hi else 0.0))
-        val deepPct = pct(m.deepMin)
-        val remPct = pct(m.remMin)
-        val lightPct = pct(m.lightMin)
-        val stages = (band(deepPct, 13.0, 23.0, 6.0) + band(remPct, 18.0, 26.0, 5.0) + band(lightPct, 0.0, 65.0, 4.0)) / 3
+        val deepPct = if (m.tstMin > 0) m.deepMin / m.tstMin * 100 else 0.0
+        val remPct = if (m.tstMin > 0) m.remMin / m.tstMin * 100 else 0.0
         notes[Component.STAGES] = when {
             deepPct < 13 -> "Wenig Tiefschlaf (${deepPct.roundToInt()} %)"
             remPct < 18 -> "Wenig REM-Schlaf (${remPct.roundToInt()} %)"
             else -> "Schlafphasen"
         }
-
-        // Regelmäßigkeit (Windred 2024, NSF 2023)
-        val regularity = if (r.nights >= 3 && r.spreadMin != null) ramp(-r.spreadMin, -90.0, -20.0) else null
         notes[Component.REGULARITY] = r.spreadMin?.let { "Schlafzeiten schwanken um ±${it.roundToInt()} min" } ?: "Regelmäßigkeit"
-
-        // Atmung & SpO2
-        var respScore: Double? = null
-        if (p.respAvg != null) {
-            respScore = if (personal && b.respMean != null) interp(abs(p.respAvg - b.respMean), 1.0 to 100.0, 3.0 to 40.0, 4.0 to 0.0)
-            else if (p.respAvg in 11.8..19.2) 100.0 else 50.0
-        }
-        val spo2Score = p.spo2Avg?.let { interp(it, 90.0 to 0.0, 92.0 to 40.0, 95.0 to 100.0) }
-        val breathing = weighted(respScore to 0.6, spo2Score to 0.4)
         notes[Component.BREATHING] = when {
             p.respAvg != null && b.respMean != null && p.respAvg - b.respMean >= 3 ->
                 "Atemfrequenz erhöht (${"%.1f".format(java.util.Locale.GERMANY, p.respAvg)}/min)"
@@ -297,10 +330,6 @@ object Sleep {
             else -> "Atmung"
         }
 
-        val components = linkedMapOf(
-            Component.DURATION to duration, Component.CONTINUITY to continuity, Component.RECOVERY to recovery,
-            Component.STAGES to stages, Component.REGULARITY to regularity, Component.BREATHING to breathing,
-        )
         var sumW = 0.0
         var sum = 0.0
         val losses = ArrayList<Pair<Component, Double>>()
@@ -319,17 +348,19 @@ object Sleep {
 
         return ScoreResult(
             score = score,
-            label = when {
-                score >= 90 -> "Hervorragend"
-                score >= 80 -> "Gut"
-                score >= 60 -> "Ausreichend"
-                else -> "Schlecht"
-            },
+            label = label(score),
             components = components,
             coverage = sumW,
             provisional = !personal,
             factors = factors,
         )
+    }
+
+    fun label(score: Int) = when {
+        score >= 90 -> "Hervorragend"
+        score >= 80 -> "Gut"
+        score >= 60 -> "Ausreichend"
+        else -> "Schlecht"
     }
 
     private fun weighted(vararg parts: Pair<Double?, Double>): Double? {

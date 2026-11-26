@@ -193,28 +193,6 @@ fun <K> Segmented(options: List<Pair<K, String>>, selected: K, onSelect: (K) -> 
     }
 }
 
-/** Screen header: small label, large title, and up to three totals underneath. */
-@Composable
-fun Hero(label: String, title: String, totals: List<Triple<String, String, String>>, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth().padding(top = G.s5, bottom = G.s5)) {
-        Label(label)
-        Spacer(Modifier.height(G.s1))
-        Text(title, style = T.display, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (totals.isNotEmpty()) {
-            Spacer(Modifier.height(G.s5))
-            Row(horizontalArrangement = Arrangement.spacedBy(G.s6)) {
-                for ((l, v, u) in totals) {
-                    Column {
-                        Label(l)
-                        Spacer(Modifier.height(G.s1))
-                        ValueUnit(v, u, T.xxl)
-                    }
-                }
-            }
-        }
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Routes
 

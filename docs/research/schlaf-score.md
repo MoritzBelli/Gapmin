@@ -125,7 +125,14 @@ Pro Nacht werden die zwei Komponenten mit dem größten gewichteten Punktverlust
 ### 2.5 Nachtdetails, die gespeichert werden
 Zu Bett, Einschlafen, Aufwachen, Aufstehen, Zeit im Bett, Gesamtschlafzeit, Latenz, WASO, Anzahl Aufwachen (gesamt / > 5 min), Minuten und Anteile von Tief/Leicht/REM/Wach, REM-Latenz, Anteil des Tiefschlafs in der ersten und des REM-Schlafs in der zweiten Nachthälfte, Schlaf-HF (Mittel, Minimum, Zeitpunkt des Minimums, Abfall gegenüber dem Tag), HRV (Mittel, Maximum), Stress im Schlaf, Atmung (Mittel/Min/Max), SpO2 (Mittel/Min, Anteil < 90 %), Body-Battery-Ladung, Schlafmitte, Regelmäßigkeit, alle Teilscores, GSS und Garmin-Score.
 
-### 2.6 Grenzen
+### 2.6 Darstellung in der App
+- **Score-Herleitung**: Jede Komponente zeigt Teilscore sᵢ, Beitrag wᵢ·sᵢ und maximal mögliche Punkte. Aufgeklappt stehen Definition, alle Eingangswerte mit ihrem Teilscore und internem Anteil, die Formel und die Quelle. Die Teilscores berechnet `Sleep.parts()`; dieselbe Funktion bildet den gespeicherten Score.
+- **„Autonome Erholung“** heißt: nächtliche Erholung des vegetativen Nervensystems. Im erholsamen Schlaf überwiegt der Parasympathikus; die HRV (RMSSD) steigt, der Puls sinkt. Bewertet wird nur gegen die eigenen 28 Nächte.
+- **Messwerte** (Dauer & Timing, Kontinuität, Architektur, autonome Physiologie, Atmung) mit Baseline, Δ, z, Literaturreferenz und Verlauf, siehe `docs/research/gesundheit.md` §1.
+- **Hypnogramm** mit Phasentabelle: Dauer, % TST, eigenes 28-Nächte-Mittel, Referenzband.
+- **Score-Karte**: Ø 7 Nächte ± SD, Baseline 28 Nächte ± SD, Perzentil der Nacht unter den letzten 90, Übereinstimmung GSS ↔ Garmin (Pearson-r, Bland-Altman).
+
+### 2.7 Grenzen
 - Phasen und Wachzeiten stammen aus einem Handgelenk-Algorithmus (κ ≈ 0,2–0,3 gegenüber PSG). Einzelnächte schwanken. Aussagekräftig sind Trends über Wochen.
 - Die Schwellen stammen aus Bevölkerungsstudien. Die Teilscores für Erholung, Atmung und HF sind deshalb bewusst **personalisiert** (Baseline).
 - Zufriedenheit und Wachheit am Tag (Ru-SATED) fehlen bisher. Geplant ist eine optionale 1-Tap-Morgenabfrage.

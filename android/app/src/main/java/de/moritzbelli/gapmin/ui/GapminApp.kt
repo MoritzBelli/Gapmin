@@ -58,6 +58,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import de.moritzbelli.gapmin.Notice
 import de.moritzbelli.gapmin.UiState
+import de.moritzbelli.gapmin.core.DaySeries
 import de.moritzbelli.gapmin.core.RunCategory
 import de.moritzbelli.gapmin.core.TrackSample
 import kotlinx.coroutines.delay
@@ -66,6 +67,7 @@ import kotlinx.coroutines.launch
 enum class Tab(val label: String, val icon: ImageVector) {
     RUNS("Läufe", GIcons.Run),
     SLEEP("Schlaf", GIcons.Moon),
+    HEALTH("Health", GIcons.Heart),
     DATA("Daten", GIcons.Data),
 }
 
@@ -74,6 +76,7 @@ fun GapminApp(
     state: UiState,
     actions: DataActions,
     loadTrack: (String, (List<TrackSample>) -> Unit) -> Unit,
+    loadDay: (String, (DaySeries) -> Unit) -> Unit,
     dismissNotice: () -> Unit,
     initialTab: Tab? = null,
     initialRun: String? = null,
@@ -83,9 +86,11 @@ fun GapminApp(
     var filter by rememberSaveable { mutableStateOf<RunCategory?>(null) }
     var sort by rememberSaveable { mutableStateOf(RunSort.DATE) }
     var night by rememberSaveable { mutableIntStateOf(0) }
+    var day by rememberSaveable { mutableIntStateOf(0) }
     var routedEmpty by rememberSaveable { mutableStateOf(false) }
     val runsList = rememberLazyListState()
     val sleepList = rememberLazyListState()
+    val healthList = rememberLazyListState()
     val dataList = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
@@ -93,10 +98,11 @@ fun GapminApp(
     LaunchedEffect(state.loaded) {
         if (state.loaded && !routedEmpty && initialTab == null) {
             routedEmpty = true
-            if (state.stats.activities == 0 && state.stats.nights == 0) tab = Tab.DATA
+            if (state.stats.activities == 0 && state.stats.nights == 0 && state.days.isEmpty()) tab = Tab.DATA
         }
     }
     LaunchedEffect(state.nights.size) { if (night >= state.nights.size) night = 0 }
+    LaunchedEffect(state.days.size) { if (day >= state.days.size) day = 0 }
 
     val visible = remember(state.runs, filter, sort) { visibleRuns(state.runs, filter, sort) }
 
@@ -142,6 +148,7 @@ fun GapminApp(
                                     onGoToData = { tab = Tab.DATA },
                                 )
                                 Tab.SLEEP -> SleepScreen(state.nights, night, { night = it }, sleepList, bottomPad, onGoToData = { tab = Tab.DATA })
+                                Tab.HEALTH -> HealthScreen(state.days, day, { day = it }, loadDay, healthList, bottomPad, onGoToData = { tab = Tab.DATA })
                                 Tab.DATA -> DataScreen(state, actions, dataList, bottomPad)
                             }
                         }
@@ -161,6 +168,7 @@ fun GapminApp(
                                         when (t) {
                                             Tab.RUNS -> runsList.animateScrollToItem(0)
                                             Tab.SLEEP -> sleepList.animateScrollToItem(0)
+                                            Tab.HEALTH -> healthList.animateScrollToItem(0)
                                             Tab.DATA -> dataList.animateScrollToItem(0)
                                         }
                                     }
@@ -216,7 +224,7 @@ private fun NavPill(tab: Tab, onSelect: (Tab) -> Unit, busy: Boolean, modifier: 
                     val on = t == tab
                     Row(
                         Modifier
-                            .width(104.dp)
+                            .width(84.dp)
                             .height(48.dp)
                             .onSizeChanged { itemW = it.width }
                             .clip(CircleShape)
@@ -224,8 +232,8 @@ private fun NavPill(tab: Tab, onSelect: (Tab) -> Unit, busy: Boolean, modifier: 
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
                     ) {
-                        Icon(t.icon, null, tint = if (on) G.accent else G.text3, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
+                        Icon(t.icon, null, tint = if (on) G.accent else G.text3, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(5.dp))
                         Text(t.label, style = T.sm, color = if (on) G.text1 else G.text2)
                         if (t == Tab.DATA && busy) {
                             Spacer(Modifier.width(4.dp))

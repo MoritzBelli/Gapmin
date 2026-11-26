@@ -38,6 +38,34 @@ object ImportChecks {
         expect(nights.all { it.score in 0..100 }, "score range")
         log("GSS avg ${nights.map { it.score }.average()} | Garmin avg ${nights.mapNotNull { it.garminScore }.average()}")
 
+        // sub-scores reproduce the stored component scores
+        for (x in nights.take(30)) {
+            val parts = Sleep.parts(
+                Sleep.PartInput(
+                    x.tstMin, x.efficiency, x.wasoMin, x.awakeningsLong, x.solMin, x.deepMin, x.lightMin, x.remMin,
+                    x.physiology.hrvAvg, x.physiology.hrAvg, x.physiology.stressAvg, x.physiology.respAvg, x.physiology.spo2Avg,
+                    if (x.regularitySd != null) 7 else 0, x.regularitySd,
+                    Baselines(x.baselineNights, x.lnHrvMean, x.lnHrvSd, x.hrMean, x.respMean),
+                ),
+            )
+            val comp = Sleep.componentScores(parts)
+            for (c in listOf(Component.DURATION, Component.CONTINUITY, Component.RECOVERY, Component.STAGES, Component.BREATHING)) {
+                val a = comp[c]; val b = x.components[c]
+                expect((a == null) == (b == null) && (a == null || kotlin.math.abs(a - b!!) < 1e-6), "parts ${x.night} $c $a vs $b")
+            }
+        }
+
+        val days = Health.listDays(db, 100_000)
+        val d0 = days.first()
+        log("health days ${days.size}, ${d0.date}: rhr=${d0.restingHr} stress=${d0.stressAvg} bb=${d0.bbMin}-${d0.bbMax} steps=${d0.steps} hrv=${d0.hrvNight} im=${d0.imWeighted}")
+        expect(days.size > 140, "health days ${days.size}")
+        expect(days.count { it.stressAvg != null } > 140 && days.count { it.bbMax != null } > 140, "stress / body battery per day")
+        expect(days.count { it.restingHr != null } > 100 && days.count { it.steps != null } > 140, "resting hr / steps per day")
+        expect(days.all { s -> listOfNotNull(s.stressRest, s.stressLow, s.stressMed, s.stressHigh).sum().let { it == 0.0 || kotlin.math.abs(it - 1) < 1e-9 } }, "stress shares")
+        val series = Health.daySeries(db, days[1].date)
+        expect(series.stress.isNotEmpty() && series.bb.isNotEmpty() && series.hr.isNotEmpty(), "day series")
+        expect(Stat.desc(listOf(1.0, 2.0, 3.0, 4.0))!!.median == 2.5, "median")
+
         val runs = Repo.listRuns(db)
         log("runs ${runs.size}, first ${runs.first().name} ${Fmt.km(runs.first().distanceM)} km ${Fmt.pace(runs.first().paceSPerKm)} /km, preview ${runs.first().preview.size}")
         expect(Repo.track(db, runs.first().id).size > 100, "track points")

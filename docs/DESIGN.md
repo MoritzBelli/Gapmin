@@ -25,6 +25,8 @@ Alle Werte stehen in der App in [`ui/Theme.kt`](../android/app/src/main/java/de/
 | Lauftypen | `--run-*` | Neon-Kategoriefarben, einzige satte Farben der App |
 | Glow | `--glow-strength` | Halo unter Datenlinien (0,45, Hover 0,85) |
 | HF-Zonen | `--zone-1 … --zone-5` | sequentiell kühl → heiß |
+| Messgrößen | `heart`, `hrvColor`, `battery`, `activity`, `oxygen`, `breath`, `sleepColor` | eine Farbe pro physiologischer Größe (Punkt, Linie, Band) |
+| Stresskategorien | `stressRest/Low/Med/High` | Garmin-Bereiche 0–25 / 26–50 / 51–75 / 76–100 |
 | Trends | `--good`, `--bad`, `--neutral` | Veränderungen gegenüber Baseline |
 
 Regel für Kategoriefarben: Sie erscheinen als kleiner Punkt (6 px) oder als leuchtende Datenlinie (Linie + weichgezeichneter Halo), nie als Fläche oder Textfarbe. So leuchten die Daten auf einer sonst schwarz-grauen Oberfläche.
@@ -72,6 +74,10 @@ Zahlen: Klasse `.num` (leicht, enge Laufweite), Einheit als `<span class="unit">
 - **Kachel** (`.tile`): Visual oben (Neon-Strecke in Typfarbe), Datum, Hauptzahl, Trenner, drei Nebenwerte. Hover: Fläche heller, Glow stärker.
 - **Typ-Tag** (`.type-tag`): Punkt + Label, ohne Rahmen.
 - **Detail-Overlay**: Visual links, Zahlen rechts; mobil als Bottom-Sheet. Esc schließt, ← → blättert.
+- **Keine Seitentitel.** Der aktive Bereich steht in der Navigation. Oben stehen höchstens Summen (`Totals`) oder der Tag-/Nacht-Wähler.
+- **Navigation**: Läufe, Schlaf, Health, Daten.
+- **Messwert-Zeile** (`MetricRow`, `ui/Metrics.kt`): Name, Wert mit Einheit, z-Balken (−3 bis +3 SD, ±1 SD hell), Δ und z zur Baseline (28 vorherige Werte), Baseline-Mittel ± SD und n. Antippen klappt Verlauf (90 Werte) und Statistik auf (n, Median, IQR, Min–Max, SD, CV, OLS-Trend, r). Methodik: `docs/research/gesundheit.md`.
+- **Tageswähler** (`DayStrip`): Balken pro Tag/Nacht, neuester rechts.
 
 ## Datenvisualisierung (für kommende Ansichten)
 

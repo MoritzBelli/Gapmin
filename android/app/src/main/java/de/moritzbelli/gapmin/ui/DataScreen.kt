@@ -71,8 +71,7 @@ fun DataScreen(state: UiState, actions: DataActions, listState: LazyListState, b
         verticalArrangement = Arrangement.spacedBy(G.s3),
     ) {
         item {
-            Hero(
-                "App", "Daten",
+            Totals(
                 listOf(
                     Triple("Aktivitäten", s.activities.toString(), ""),
                     Triple("Nächte", s.nights.toString(), ""),

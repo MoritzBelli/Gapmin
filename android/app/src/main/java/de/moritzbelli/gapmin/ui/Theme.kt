@@ -59,6 +59,19 @@ object G {
     val zone4 = Color(0xFFFFAD72)
     val zone5 = Color(0xFFFF6B6B)
 
+    // Health data colours (one per measured quantity)
+    val heart = Color(0xFFFF6B8A)
+    val hrvColor = Color(0xFFA78BFA)
+    val battery = Color(0xFF2EE6D0)
+    val stressRest = Color(0xFF4FA8FF)
+    val stressLow = Color(0xFFFFD36B)
+    val stressMed = Color(0xFFFFA14D)
+    val stressHigh = Color(0xFFFF6B4A)
+    val activity = Color(0xFF4ADE80)
+    val oxygen = Color(0xFF60A5FA)
+    val breath = Color(0xFF5EEAD4)
+    val sleepColor = Color(0xFF7C6CFF)
+
     val good = Color(0xFF7DDCA0)
     val bad = Color(0xFFFF7B7B)
 
