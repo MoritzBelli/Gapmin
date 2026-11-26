@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
@@ -106,10 +107,26 @@ fun GCard(modifier: Modifier = Modifier, padding: Dp = G.s5, content: @Composabl
 
 @Composable
 fun CardHead(title: String, trailing: String? = null) {
+    if (trailing != null && trailing.length > 12) {
+        // long meta (e.g. "zuletzt 26. Nov. 2026, 19:32") goes below the title on phones
+        Column(Modifier.fillMaxWidth().padding(bottom = G.s4)) {
+            Text(title, style = T.mdMedium, maxLines = 1)
+            Spacer(Modifier.height(2.dp))
+            Label(trailing)
+        }
+        return
+    }
     Row(Modifier.fillMaxWidth().padding(bottom = G.s4), verticalAlignment = Alignment.Bottom) {
-        Text(title, style = T.mdMedium, modifier = Modifier.weight(1f))
+        Text(title, style = T.mdMedium, modifier = Modifier.weight(1f), maxLines = 1)
         if (trailing != null) Label(trailing)
     }
+}
+
+/** Let horizontally scrolling content run to the screen edges inside a padded list. */
+fun Modifier.bleed(horizontal: Dp): Modifier = this.layout { measurable, constraints ->
+    val extra = horizontal.roundToPx() * 2
+    val p = measurable.measure(constraints.copy(minWidth = constraints.minWidth + extra, maxWidth = constraints.maxWidth + extra))
+    layout(constraints.maxWidth, p.height) { p.place(-extra / 2, 0) }
 }
 
 @Composable
@@ -240,10 +257,16 @@ fun RouteShape(
     }
     Box(
         modifier.drawWithCache {
-            val inner = size.minDimension * (1 - 2 * paddingFraction)
-            val ox = (size.width - inner) / 2
-            val oy = (size.height - inner) / 2
-            val pts = norm.map { Offset(ox + it.x * inner, oy + it.y * inner) }
+            // fit the route's own bounding box into the drawing area (works for square and wide boxes)
+            val minX = norm.minOf { it.x }; val maxX = norm.maxOf { it.x }
+            val minY = norm.minOf { it.y }; val maxY = norm.maxOf { it.y }
+            val bw = (maxX - minX).coerceAtLeast(1e-6f)
+            val bh = (maxY - minY).coerceAtLeast(1e-6f)
+            val pad = size.minDimension * paddingFraction
+            val scale = minOf((size.width - 2 * pad) / bw, (size.height - 2 * pad) / bh)
+            val ox = (size.width - bw * scale) / 2 - minX * scale
+            val oy = (size.height - bh * scale) / 2 - minY * scale
+            val pts = norm.map { Offset(ox + it.x * scale, oy + it.y * scale) }
             val path = Path().apply {
                 moveTo(pts[0].x, pts[0].y)
                 for (i in 1 until pts.size) lineTo(pts[i].x, pts[i].y)
@@ -294,7 +317,7 @@ fun PillButton(
             .clip(CircleShape)
             .background(bg)
             .then(if (enabled) Modifier.pressable(onClick, haptic = true) else Modifier)
-            .padding(horizontal = 18.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {

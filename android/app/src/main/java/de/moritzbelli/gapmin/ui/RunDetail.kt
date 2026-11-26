@@ -118,7 +118,7 @@ private fun RunDetailPage(
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             RouteShape(
                 run.preview, color,
-                Modifier.widthIn(max = 460.dp).fillMaxWidth().aspectRatio(1f).sharedRoute(run.id, shared),
+                Modifier.widthIn(max = 460.dp).fillMaxWidth().aspectRatio(routeAspect(run.preview)).sharedRoute(run.id, shared),
                 strokeWidth = 2.2.dp,
                 drawIn = false,
                 paddingFraction = 0.06f,
@@ -306,4 +306,14 @@ fun LineChartCard(
             Label("${Fmt.km(x.last(), 1)} km")
         }
     }
+}
+
+/** Width/height of the route's bounding box, clamped so the detail visual stays between square and 16:10. */
+private fun routeAspect(points: List<de.moritzbelli.gapmin.core.LatLon>): Float {
+    if (points.size < 2) return 1f
+    val k = kotlin.math.cos(points.sumOf { it.lat } / points.size * Math.PI / 180)
+    val w = (points.maxOf { it.lon } - points.minOf { it.lon }) * k
+    val h = points.maxOf { it.lat } - points.minOf { it.lat }
+    if (h <= 0) return 1.6f
+    return (w / h).toFloat().coerceIn(1f, 1.6f)
 }

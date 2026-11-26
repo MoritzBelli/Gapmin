@@ -212,8 +212,8 @@ private fun NasCard(state: UiState, actions: DataActions) {
         }
         Spacer(Modifier.height(G.s4))
         Row(horizontalArrangement = Arrangement.spacedBy(G.s2)) {
-            PillButton("Speichern & testen", Modifier.weight(1f)) { actions.saveNas(url, token, auto) }
-            PillButton("Synchronisieren", Modifier.weight(1f), primary = true, enabled = state.nasUrl.isNotBlank(), icon = GIcons.Sync, onClick = actions.sync)
+            PillButton("Speichern", Modifier.weight(1f)) { actions.saveNas(url, token, auto) }
+            PillButton("Sync starten", Modifier.weight(1f), primary = true, enabled = state.nasUrl.isNotBlank(), icon = GIcons.Sync, onClick = actions.sync)
         }
     }
 }

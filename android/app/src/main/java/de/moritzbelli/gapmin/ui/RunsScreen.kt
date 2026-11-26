@@ -107,7 +107,7 @@ fun RunsScreen(
             item(key = "toolbar") {
                 Column(Modifier.fillMaxWidth().padding(bottom = G.s2)) {
                     Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        Modifier.fillMaxWidth().bleed(G.s4).horizontalScroll(rememberScrollState()).padding(horizontal = G.s4),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         FilterChip("Alle", filter == null, null) { onFilter(null) }

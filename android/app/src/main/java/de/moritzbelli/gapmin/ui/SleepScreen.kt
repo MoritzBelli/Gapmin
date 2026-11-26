@@ -310,6 +310,16 @@ private fun Hypnogram(n: SleepNight, modifier: Modifier) {
             drawLine(G.hairline, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
         }
         val limit = size.width * reveal.value
+        // thin step line connecting the stages, under the blocks
+        val step = androidx.compose.ui.graphics.Path()
+        n.hypnogram.forEachIndexed { i, s ->
+            val x0 = (s.offsetMin / total * size.width).toFloat().coerceAtMost(limit)
+            val x1 = ((s.offsetMin + s.durMin) / total * size.width).toFloat().coerceAtMost(limit)
+            val y = row(s.stage) * rowH + rowH / 2
+            if (i == 0) step.moveTo(x0, y) else step.lineTo(x0, y)
+            step.lineTo(x1, y)
+        }
+        drawPath(step, G.hairlineStrong, style = Stroke(1.dp.toPx()))
         for (s in n.hypnogram) {
             val x0 = (s.offsetMin / total * size.width).toFloat()
             if (x0 > limit) continue
