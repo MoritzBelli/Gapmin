@@ -130,8 +130,8 @@ fun <T> TrendsCard(
             "Median" to (desc?.let { def.fmt(it.median) } ?: "–"),
         )
         val row2 = listOf(
-            "Trend / 30 T" to (trend?.let { def.fmtDelta(it.slope * 30) } ?: "–"),
-            "95 %-KI ±" to (trend?.let { def.fmtSpread(1.96 * it.se * 30) } ?: "–"),
+            "Trend / 30 T" to (trend?.let { fine(def, it.slope * 30) } ?: "–"),
+            "95 %-KI ±" to (trend?.let { fine(def, 1.96 * it.se * 30, signed = false) } ?: "–"),
             "r" to (trend?.let { Fmt.num(it.r, 2) } ?: "–"),
             "R²" to (trend?.let { Fmt.num(it.r * it.r, 2) } ?: "–"),
         )
@@ -159,7 +159,7 @@ fun <T> TrendsCard(
         Box(Modifier.fillMaxWidth().height(1.dp).background(G.hairline))
         Spacer(Modifier.height(G.s3))
         Row(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-            Label("Zeitraum", Modifier.weight(1.0f))
+            Label("Block", Modifier.weight(1.0f))
             Label("n", Modifier.weight(0.45f))
             Label("Ø ± SD", Modifier.weight(1.9f))
             Label("Δ davor", Modifier.weight(1.45f))
@@ -187,6 +187,15 @@ fun <T> TrendsCard(
             style = T.unit.copy(lineHeight = 16.sp),
         )
     }
+}
+
+/** Trend values are small: one more decimal than the metric's display precision. */
+private fun fine(def: MetricDef<*>, v: Double, signed: Boolean = true): String = when (def.kind) {
+    Kind.NUM -> {
+        val d = def.digits + 1
+        (if (signed) Fmt.signed(v, d) else Fmt.num(v, d)) + if (def.unit.isNotEmpty()) " ${def.unit}" else ""
+    }
+    else -> (if (signed) Fmt.signed(v, 1) else Fmt.num(v, 1)) + " min"
 }
 
 @Composable
