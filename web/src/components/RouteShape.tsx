@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { loadRouteShape } from '../lib/gpx'
 import type { RouteShape as Shape } from '../types'
 
@@ -21,6 +21,7 @@ export function RouteShape({ url, lazy = true, draw = true, strokeWidth = 1.4, s
   const [visible, setVisible] = useState(!lazy)
   const [shape, setShape] = useState<Shape | null>(null)
   const [failed, setFailed] = useState(false)
+  const glowId = `glow${useId().replace(/:/g, '')}`
 
   useEffect(() => {
     if (visible || !ref.current) return
@@ -52,6 +53,13 @@ export function RouteShape({ url, lazy = true, draw = true, strokeWidth = 1.4, s
     <svg ref={ref} className="route" viewBox="0 0 100 100" role="img" aria-label="Streckenverlauf" style={style}>
       {shape && (
         <g style={{ '--sw': strokeWidth } as CSSProperties}>
+          <defs>
+            <filter id={glowId} x="-25%" y="-25%" width="150%" height="150%">
+              <feGaussianBlur stdDeviation={strokeWidth * 1.4} />
+            </filter>
+          </defs>
+          <path d={shape.path} pathLength={1} filter={`url(#${glowId})`}
+            className={draw ? 'route-glow draw' : 'route-glow'} />
           <path d={shape.path} pathLength={1} className={draw ? 'route-line draw' : 'route-line'} />
           <circle cx={shape.end[0]} cy={shape.end[1]} r={strokeWidth * 1.25} className="route-end" />
           <circle cx={shape.start[0]} cy={shape.start[1]} r={strokeWidth * 1.25} className="route-start" />

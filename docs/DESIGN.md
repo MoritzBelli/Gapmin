@@ -7,7 +7,7 @@ Alle Werte stehen als CSS-Variablen in [`web/src/styles/tokens.css`](../web/src/
 
 1. **Daten zuerst.** Farbe ist für Daten reserviert. Die Oberfläche selbst ist schwarz, weiß und grau.
 2. **Eine Akzentfarbe.** `--accent` (Volt-Gelb) nur für Marke, Fokus und aktive Auswahl. Nie für Diagramme.
-3. **Ruhe durch Weglassen.** Keine Schatten-Stapel, kein Glow, keine Verläufe auf Flächen, keine Icons ohne Funktion. Trennung über Hairlines und Helligkeitsstufen.
+3. **Ruhe durch Weglassen.** Keine Schatten-Stapel, keine Verläufe auf Flächen, keine Icons ohne Funktion. Trennung über Hairlines und Helligkeitsstufen. Glow gibt es nur an Datenlinien.
 4. **Große Zahlen, leichte Schrift.** Kennzahlen sind das Gestaltungselement: groß, `--fw-light`, tabellarische Ziffern, Einheit klein und gedimmt.
 5. **Bewegung erklärt.** Animation zeigt, woher etwas kommt (Kachel → Detail), nie Dekoration. Weich, kurz, abschaltbar (`prefers-reduced-motion`).
 6. **Eine Ebene tief.** Bereiche oben (mobil unten), Inhalt, Detail als Overlay. Kein Menü im Menü. Alles per Tastatur bedienbar.
@@ -22,11 +22,12 @@ Alle Werte stehen als CSS-Variablen in [`web/src/styles/tokens.css`](../web/src/
 | Linien | `--hairline`, `--hairline-strong` | 1-px-Trenner und Konturen |
 | Text | `--text-1/2/3` | Werte / Sekundär / Labels und Einheiten |
 | Akzent | `--accent` | Fokus, aktiver Zustand, Marke |
-| Lauftypen | `--run-*` | gedämpfte Kategoriefarben gleicher Helligkeit |
+| Lauftypen | `--run-*` | Neon-Kategoriefarben, einzige satte Farben der App |
+| Glow | `--glow-strength` | Halo unter Datenlinien (0,45, Hover 0,85) |
 | HF-Zonen | `--zone-1 … --zone-5` | sequentiell kühl → heiß |
 | Trends | `--good`, `--bad`, `--neutral` | Veränderungen gegenüber Baseline |
 
-Regel für Kategoriefarben: Sie erscheinen als kleiner Punkt (6 px) oder als Datenlinie, nie als Fläche oder Textfarbe.
+Regel für Kategoriefarben: Sie erscheinen als kleiner Punkt (6 px) oder als leuchtende Datenlinie (Linie + weichgezeichneter Halo), nie als Fläche oder Textfarbe. So leuchten die Daten auf einer sonst schwarz-grauen Oberfläche.
 
 ## Typografie
 
@@ -68,13 +69,13 @@ Zahlen: Klasse `.num` (leicht, enge Laufweite), Einheit als `<span class="unit">
 
 - **Segmented Control** (`.segmented`): einzige Form für exklusive Auswahl (Bereiche, Sortierung, Zeitraum).
 - **Chip** (`.chip`): Filter, mit 6-px-Datenpunkt; aktiv = `--surface-3`.
-- **Kachel** (`.tile`): Visual oben (Strecke), Datum, Hauptzahl, Trenner, drei Nebenwerte. Hover: Fläche heller, Datenlinie nimmt Typfarbe an.
+- **Kachel** (`.tile`): Visual oben (Neon-Strecke in Typfarbe), Datum, Hauptzahl, Trenner, drei Nebenwerte. Hover: Fläche heller, Glow stärker.
 - **Typ-Tag** (`.type-tag`): Punkt + Label, ohne Rahmen.
 - **Detail-Overlay**: Visual links, Zahlen rechts; mobil als Bottom-Sheet. Esc schließt, ← → blättert.
 
 ## Datenvisualisierung (für kommende Ansichten)
 
-- Linien 1,5 px, `--data-line`, keine Füllungen außer sehr leichtem Verlauf unter Flächenkurven (max. 12 %).
+- Linien 1,5 px in Daten- oder Typfarbe mit Halo, keine Füllungen außer sehr leichtem Verlauf unter Flächenkurven (max. 12 %).
 - Keine Achsenrahmen; höchstens 3–4 horizontale Hairlines, Beschriftung `--fs-label` in `--text-3`.
 - Hover/Touch: Fadenkreuz + Werte-Tooltip, alle Reihen am gleichen Zeitpunkt.
 - Baselines (z. B. HRV-Normalbereich) als gedimmtes Band hinter der Linie.

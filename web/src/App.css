@@ -51,7 +51,7 @@
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: var(--s-3); }
 
 .tile {
-  --route-color: var(--data-line);
+  --route-color: var(--type);
   display: flex; flex-direction: column; text-align: left;
   padding: var(--s-3) var(--s-3) var(--s-4);
   border-radius: var(--r-lg); background: var(--surface-1);
@@ -61,7 +61,7 @@
   animation-delay: calc(var(--i) * 30ms);
 }
 .tile:hover, .tile:focus-visible {
-  --route-color: var(--type);
+  --glow-strength: 0.85;
   background: var(--surface-2);
   box-shadow: inset 0 0 0 1px var(--hairline-strong);
   transform: translateY(-2px);
@@ -87,7 +87,12 @@
   stroke-linejoin: round; stroke-linecap: round;
   transition: stroke var(--t-base) var(--ease-out);
 }
-.route-line.draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw var(--t-draw) var(--ease-in-out) forwards; }
+.route-glow {
+  fill: none; stroke: var(--route-color, var(--data-line)); stroke-width: calc(var(--sw) * 2.6);
+  stroke-linejoin: round; stroke-linecap: round; opacity: var(--glow-strength);
+  transition: opacity var(--t-base) var(--ease-out);
+}
+.route-glow.draw, .route-line.draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw var(--t-draw) var(--ease-in-out) forwards; }
 .route-start { fill: var(--route-color, var(--data-line)); transition: fill var(--t-base) var(--ease-out); }
 .route-end { fill: var(--bg); stroke: var(--route-color, var(--data-line)); stroke-width: calc(var(--sw) * 0.6); transition: stroke var(--t-base) var(--ease-out); }
 .route-error { fill: var(--text-3); font-size: 5px; }

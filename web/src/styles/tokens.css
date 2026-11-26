@@ -25,13 +25,14 @@
   --on-accent: #0b0c0d;
 
   /* ---- Data colours (only for data, never for chrome) ---- */
-  /* Run types: muted categorical, equal lightness */
-  --run-easy: #7ddca0;
-  --run-recovery: #79d0d6;
-  --run-long: #86a8ff;
-  --run-tempo: #ffad72;
-  --run-intervals: #ff86b5;
-  --run-trail: #e6cf6a;
+  /* Run types: neon categorical — the only saturated colour in the UI */
+  --run-easy: #4ade80;
+  --run-recovery: #2ee6d0;
+  --run-long: #60a5fa;
+  --run-tempo: #fb923c;
+  --run-intervals: #f472b6;
+  --run-trail: #facc15;
+  --glow-strength: 0.45; /* opacity of the blurred halo under data lines */
   /* Heart-rate zones Z1-Z5: sequential cool -> hot */
   --zone-1: #6b7a8f;
   --zone-2: #5aa9e6;
