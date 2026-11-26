@@ -1,13 +1,15 @@
 # Android-App
 
-Die App ist die Web-App aus `web/`, verpackt mit [Capacitor](https://capacitorjs.com) (`web/android/`).
-Paket-ID: `de.moritzbelli.gapmin`.
+Native App in Kotlin mit Jetpack Compose (`android/`), Paket-ID `de.moritzbelli.gapmin`.
+Bis Version 0.1 war die App eine in Capacitor verpackte Web-App. Paket-ID und Datenbankdatei (`files/gapmin.sqlite`)
+sind gleich geblieben: Wird die neue Release-APK über die alte installiert (gleicher Signierschlüssel), bleiben alle
+importierten Daten erhalten.
 
 ## Builds
 
 | Auslöser | Ergebnis |
 |---|---|
-| Push auf `main` (Änderungen in `web/`) | Test-Build, Debug-APK als Workflow-Artefakt (14 Tage), **kein Release** |
+| Push auf einen Branch (Änderungen in `android/`) | Tests, Debug-APK als Workflow-Artefakt (14 Tage), Screenshots auf Branch `ci-screenshots`, **kein Release** |
 | Actions → *Android* → *Run workflow*, `release` = an | signierte Release-APK als GitHub-Release |
 | Tag `v1.2.3` pushen | signierte Release-APK als GitHub-Release `v1.2.3` |
 
@@ -28,17 +30,15 @@ Die `.jks`-Datei sicher aufbewahren (z. B. im Passwortmanager oder NAS-Backup) u
 ## Lokal bauen
 
 ```bash
-cd web
-npm ci && npm run build && npx cap sync android
-cd android && ./gradlew assembleDebug        # Android SDK + JDK 21 nötig
-# oder: npx cap open android                  # Android Studio
+cd android
+./gradlew assembleDebug        # Android SDK + JDK 17+ nötig, oder den Ordner android/ in Android Studio öffnen
 ```
 
 ## Auf dem Handy
 
 1. APK aus dem GitHub-Release herunterladen und installieren (Installation aus unbekannten Quellen für den Browser erlauben).
 2. In Gadgetbridge: Einstellungen → Automatisierungen → **Auto-Export (ZIP)** aktivieren, z. B. alle 3 Stunden.
-3. In Gapmin unter **Daten → Export importieren** die ZIP-Datei wählen. Folgeimporte übernehmen nur neue Daten.
+3. In Gapmin unter **Daten → Export wählen** die ZIP-Datei wählen. Gapmin merkt sich die Datei und übernimmt bei jedem Öffnen der App automatisch neue Daten, wenn Gadgetbridge sie neu geschrieben hat. Alternativ eine Exportdatei in einer anderen App mit „Öffnen mit“ oder „Teilen“ an Gapmin geben.
 4. Optional **NAS-Server** eintragen (`http://<NAS-IP>:8085` + Token). Nach jedem Import synchronisiert die App automatisch, wenn der NAS erreichbar ist.
 
 Die App spricht den NAS per HTTP an (`usesCleartextTraffic`), gedacht für LAN oder WireGuard. Für den Zugriff über das Internet gehört ein Reverse-Proxy mit HTTPS davor.

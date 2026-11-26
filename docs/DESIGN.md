@@ -1,7 +1,7 @@
 # Gapmin Design System
 
 Extrem modern, minimalistisch, komplett dunkel. Die Daten sind der Inhalt, die Oberfläche tritt zurück.
-Alle Werte stehen als CSS-Variablen in [`web/src/styles/tokens.css`](../web/src/styles/tokens.css). Neue Komponenten verwenden **nur** diese Tokens, keine freien Hex-Werte, Abstände oder Zeiten.
+Alle Werte stehen in der App in [`ui/Theme.kt`](../android/app/src/main/java/de/moritzbelli/gapmin/ui/Theme.kt) (`G` für Farben, Abstände, Radien, Bewegung, `T` für Schrift), in der Web-Version als CSS-Variablen in [`web/src/styles/tokens.css`](../web/src/styles/tokens.css). Neue Komponenten verwenden **nur** diese Tokens, keine freien Hex-Werte, Abstände oder Zeiten.
 
 ## Prinzipien
 
@@ -49,7 +49,7 @@ Zahlen: Klasse `.num` (leicht, enge Laufweite), Einheit als `<span class="unit">
 
 - Abstände im 4-px-Raster: `--s-1` (4) bis `--s-8` (64).
 - Radien: `--r-sm` 10 (Fokus), `--r-md` 16, `--r-lg` 24 (Kacheln, Overlays), `--r-full` (Pillen).
-- Inhaltsbreite max. `--content-max` 1320 px. Mobil: 2 Spalten, Navigation als schwebende Pille unten.
+- Inhaltsbreite max. `--content-max` 1320 px. App: 2 Spalten (breitere Geräte mehr), Navigation als schwebende Pille unten, Inhalte randlos unter Status- und Navigationsleiste.
 
 ## Bewegung
 
