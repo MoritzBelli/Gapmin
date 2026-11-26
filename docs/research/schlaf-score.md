@@ -31,7 +31,9 @@ Stand: 26.11.2026. Ziel: ein nächtlicher Gesamtscore 0–100 (ähnlich Garmin),
 ### 1.5 Regelmäßigkeit
 - **Windred et al. 2024 (UK Biobank, n ≈ 61.000, Beschleunigungsmessung):** Regelmäßigerer Schlaf ging mit **20–48 % niedrigerem Sterberisiko** einher. Die **Regelmäßigkeit sagte die Sterblichkeit besser vorher als die Schlafdauer.**
 
-→ Regelmäßigkeit (Schwankung der Einschlaf- und Aufwachzeit über 7 Nächte) wird als eigene Komponente aufgenommen. Garmin berücksichtigt sie im Score nicht.
+- **NSF-Konsens zur Regelmäßigkeit (Sletten et al. 2023, 63 Publikationen, Delphi-Verfahren):** Gleichbleibende Einschlaf- und Aufwachzeiten sind wichtig für Gesundheit, Sicherheit und Leistung. Fehlt unter der Woche Schlaf, kann Nachholschlaf am Wochenende trotzdem sinnvoll sein.
+
+→ Regelmäßigkeit (Schwankung der Einschlaf- und Aufwachzeit über 7 Nächte) wird als eigene Komponente aufgenommen. Garmin berücksichtigt sie im Score nicht. Wegen des Konsenses zum Nachholschlaf wird eine längere Nacht nach Schlafmangel nicht doppelt bestraft: Der Regelmäßigkeits-Teilscore nutzt den Median der Abweichungen, sodass eine einzelne Ausreißernacht wenig Gewicht hat.
 
 ### 1.6 Autonome Erholung (HRV, Herzfrequenz, Stress)
 - Garmin selbst kombiniert **Dauer, Phasenbalance und nächtliche Erholung über HRV** (Stresswert im Schlaf). Phasen werden aus HF, HRV, Atmung und Bewegung geschätzt (Garmin/Firstbeat; Zusammenfassung the5krunner). Zur Qualität zählen laut Garmin Phasen, Wachzeit, Unruhe und der durchschnittliche Stress im Schlaf. Bewertet wird gegen altersbasierte Standards.
@@ -45,6 +47,13 @@ Stand: 26.11.2026. Ziel: ein nächtlicher Gesamtscore 0–100 (ähnlich Garmin),
 - **SpO2:** Typische Werte im Wachzustand liegen bei 95–99 %, nachts im Mittel etwa 0,8 Prozentpunkte niedriger. Werte unter 92 % in Raumluft auf Meereshöhe sollten abgeklärt werden, anhaltend unter 90 % gilt als auffällig.
 
 → Atmung und SpO2 sind vor allem **Warnsignale** und tragen wenig zur Qualität bei. Geringes Gewicht, deutlicher Hinweis bei Abweichung.
+
+### 1.8 Ergänzend: Matthew Walker, „Das große Buch vom Schlaf“ (2017/2018)
+Das Buch dient nur als **Zusatzinformation** für Erklärtexte, nicht als Grundlage der Gewichtung:
+- Walker ordnet guten Schlaf in **Menge, Qualität, Regelmäßigkeit und Timing** ein. Das deckt sich mit Ru-SATED und den Komponenten oben.
+- Sein wichtigster Tipp ist ein fester Schlafrhythmus. Das stützt die Regelmäßigkeits-Komponente, die unabhängig davon durch Windred 2024 und Sletten 2023 belegt ist.
+- Tiefschlaf liegt vor allem in der ersten Nachthälfte, REM vor allem in der zweiten. Wer zu früh aufsteht, verliert also überproportional REM. Gapmin zeigt diese Verteilung als **Detailwert** an, sie fließt aber nur über die Phasen-Komponente (10 %) ein.
+- **Einordnung:** Das Buch ist populärwissenschaftlich und wurde für Fehler und überzogene Aussagen kritisiert (Guzey 2019, diskutiert u. a. von Gelman, Columbia). Wo es den neueren Studien oben widerspricht, gelten die Studien.
 
 ---
 
@@ -90,8 +99,8 @@ Hilfsfunktion `ramp(x, schlecht, gut)`: linear 0 → 100 zwischen den Schwellen,
 - REM-Anteil 18–26 % (−5 Punkte pro %-Punkt außerhalb)
 - Leichtschlaf-Anteil ≤ 65 % (−4 Punkte pro %-Punkt darüber)
 
-**Regelmäßigkeit** (letzte 7 Nächte inkl. heute; Standardabweichung von Einschlaf- und Aufwachzeit in Minuten)
-- `ramp(−SD_mittel, −90, −20)`. Die Grenze von 30 min SD entspricht der in der Sleep-Health-Literatur verwendeten Grenze für „günstige“ Regelmäßigkeit (< 30 min SD, PMC8665047).
+**Regelmäßigkeit** (letzte 7 Nächte inkl. heute; robuste Streuung von Einschlaf- und Aufwachzeit in Minuten, Median der absoluten Abweichung × 1,4826 ≈ SD)
+- `ramp(−Streuung, −90, −20)`. Die Grenze von 30 min SD entspricht der in der Sleep-Health-Literatur verwendeten Grenze für „günstige“ Regelmäßigkeit (< 30 min SD, PMC8665047).
 - Zusätzlich Hinweis, wenn die Schlafmitte außerhalb von 2–4 Uhr liegt (Ru-SATED-Timing). Das fließt nicht in den Score ein.
 
 **Atmung & SpO2** = 0,6·Atmung + 0,4·SpO2
@@ -114,7 +123,7 @@ Der von der Uhr gelieferte **Garmin-Sleep-Score** wird separat gespeichert und n
 Pro Nacht werden die zwei Komponenten mit dem größten gewichteten Punktverlust als Hinweis ausgegeben, z. B. „Kurz geschlafen (6:12 h)“ oder „HRV 14 % unter deinem Normal“. So ist jede Wertung nachvollziehbar.
 
 ### 2.5 Nachtdetails, die gespeichert werden
-Zu Bett, Einschlafen, Aufwachen, Aufstehen, Zeit im Bett, Gesamtschlafzeit, Latenz, WASO, Anzahl Aufwachen (gesamt / > 5 min), Minuten und Anteile von Tief/Leicht/REM/Wach, REM-Latenz, Tiefschlaf in der ersten Nachthälfte, Schlaf-HF (Mittel, Minimum, Zeitpunkt des Minimums, Abfall gegenüber dem Tag), HRV (Mittel, Maximum), Stress im Schlaf, Atmung (Mittel/Min/Max), SpO2 (Mittel/Min, Anteil < 90 %), Body-Battery-Ladung, Schlafmitte, Regelmäßigkeit, alle Teilscores, GSS und Garmin-Score.
+Zu Bett, Einschlafen, Aufwachen, Aufstehen, Zeit im Bett, Gesamtschlafzeit, Latenz, WASO, Anzahl Aufwachen (gesamt / > 5 min), Minuten und Anteile von Tief/Leicht/REM/Wach, REM-Latenz, Anteil des Tiefschlafs in der ersten und des REM-Schlafs in der zweiten Nachthälfte, Schlaf-HF (Mittel, Minimum, Zeitpunkt des Minimums, Abfall gegenüber dem Tag), HRV (Mittel, Maximum), Stress im Schlaf, Atmung (Mittel/Min/Max), SpO2 (Mittel/Min, Anteil < 90 %), Body-Battery-Ladung, Schlafmitte, Regelmäßigkeit, alle Teilscores, GSS und Garmin-Score.
 
 ### 2.6 Grenzen
 - Phasen und Wachzeiten stammen aus einem Handgelenk-Algorithmus (κ ≈ 0,2–0,3 gegenüber PSG). Einzelnächte schwanken. Aussagekräftig sind Trends über Wochen.
@@ -130,6 +139,7 @@ Zu Bett, Einschlafen, Aufwachen, Aufstehen, Zeit im Bett, Gesamtschlafzeit, Late
 - Hirshkowitz M et al. National Sleep Foundation's sleep time duration recommendations. *Sleep Health* 2015;1(1):40–43. doi:10.1016/j.sleh.2014.12.010
 - Ohayon M et al. National Sleep Foundation's sleep quality recommendations: first report. *Sleep Health* 2017;3(1):6–19. doi:10.1016/j.sleh.2016.11.006
 - Ohayon MM, Carskadon MA, Guilleminault C, Vitiello MV. Meta-analysis of quantitative sleep parameters from childhood to old age. *Sleep* 2004;27(7):1255–1273. doi:10.1093/sleep/27.7.1255
+- Sletten TL et al. The importance of sleep regularity: a consensus statement of the National Sleep Foundation sleep timing and variability panel. *Sleep Health* 2023;9(6):801–820. doi:10.1016/j.sleh.2023.07.016
 - Windred DP et al. Sleep regularity is a stronger predictor of mortality risk than sleep duration. *Sleep* 2024;47(1). PMC10782501
 - Miller DJ et al. A Validation of Six Wearable Devices for Estimating Sleep, Heart Rate and HRV in Healthy Adults. *Sensors* 2022;22(16):6317. doi:10.3390/s22166317
 - Mouritzen NJ et al. Assessing the performance of a commercial multisensory sleep tracker. *PLoS One* 2020. PMC7732119
@@ -138,4 +148,5 @@ Zu Bett, Einschlafen, Aufwachen, Aufstehen, Zeit im Bett, Gesamtschlafzeit, Late
 - Natarajan A et al. Measurement of respiratory rate using wearable devices and applications to COVID-19 detection. *npj Digit Med* 2021. doi:10.1038/s41746-021-00493-6
 - Nächtliche SpO2-Referenzwerte aus Wearables: *npj Digit Med* 2023. doi:10.1038/s41746-023-00851-6
 - Herzfrequenz-Dipping: Hilmisson et al., *Front Sleep* 2024. doi:10.3389/frsle.2024.1230958; *J Hypertens* 2025;43(5):790–796
+- Ergänzend: Walker M. *Why We Sleep / Das große Buch vom Schlaf.* Scribner 2017 / Goldmann 2018. Kritik: Guzey A. „Matthew Walker's 'Why We Sleep' Is Riddled with Scientific and Factual Errors“, guzey.com, 2019
 - Garmin: „How Garmin watches track your sleep, calculate sleep score“ (garmin.com Blog); the5krunner, Garmin Sleep Score
