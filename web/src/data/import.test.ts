@@ -52,6 +52,13 @@ describe('Gadgetbridge import', async () => {
     expect(Number(last.tst_min)).toBeGreaterThan(300)
   })
 
+  it('exports the app database for server tests', async () => {
+    const out = process.env.GAPMIN_EXPORT_DB
+    if (!out) return
+    const { writeFileSync } = await import('node:fs')
+    writeFileSync(out, db.export())
+  })
+
   it('is idempotent on re-import', async () => {
     const before = query<{ n: number }>(db, 'SELECT (SELECT COUNT(*) FROM metric_samples) + (SELECT COUNT(*) FROM activities) n')[0].n
     const again = await importGadgetbridge(db, zip)

@@ -1,0 +1,48 @@
+name: Server
+
+on:
+  push:
+    branches: [main]
+    paths: ['server/**', 'web/src/db/**', 'web/src/data/**', '.github/workflows/server.yml']
+  pull_request:
+    paths: ['server/**']
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        db: ['timescale/timescaledb:latest-pg16', 'postgres:16']
+    services:
+      postgres:
+        image: ${{ matrix.db }}
+        env:
+          POSTGRES_USER: gapmin
+          POSTGRES_PASSWORD: gapmin
+          POSTGRES_DB: gapmin
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U gapmin" --health-interval 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build app database from the demo export
+        working-directory: web
+        run: |
+          npm ci
+          GAPMIN_EXPORT_DB=/tmp/gapmin-app.sqlite TZ=Europe/Berlin npx vitest run
+      - name: Server tests
+        working-directory: server
+        env:
+          DATABASE_URL: postgresql://gapmin:gapmin@localhost:5432/gapmin
+        run: |
+          pip install -r requirements.txt pytest httpx
+          python -m pytest -q -s tests

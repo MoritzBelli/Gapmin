@@ -1,0 +1,38 @@
+# Gapmin on the NAS (OpenMediaVault: Compose plugin or `docker compose up -d` in this folder)
+#
+#   cp .env.example .env   # set POSTGRES_PASSWORD and GAPMIN_TOKEN
+#   docker compose up -d
+#
+# The app then syncs to http://<NAS-IP>:8085 (LAN or WireGuard).
+
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gapmin
+      POSTGRES_USER: gapmin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      TIMESCALEDB_TELEMETRY: "off"
+    volumes:
+      - ${GAPMIN_DATA_DIR:-./data}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gapmin -d gapmin"]
+      interval: 10s
+      retries: 10
+    # Only reachable inside the compose network; uncomment to query from your PC (e.g. DBeaver)
+    # ports:
+    #   - "5432:5432"
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://gapmin:${POSTGRES_PASSWORD}@db:5432/gapmin
+      GAPMIN_TOKEN: ${GAPMIN_TOKEN:?set GAPMIN_TOKEN in .env}
+      TZ: Europe/Berlin
+    ports:
+      - "${GAPMIN_PORT:-8085}:8085"

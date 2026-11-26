@@ -1,3 +1,5 @@
+import { App as CapApp } from '@capacitor/app'
+import { Capacitor } from '@capacitor/core'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { flushSync } from 'react-dom'
 import type { Database } from 'sql.js'
@@ -38,6 +40,18 @@ export default function App() {
     else apply()
     window.scrollTo({ top: 0 })
   }, [])
+
+  // Android back button: close an open overlay, then return to Läufe, then leave the app
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+    const h = CapApp.addListener('backButton', () => {
+      if (document.querySelector('.detail-backdrop')) {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      } else if (tab !== 'runs') go('runs')
+      else void CapApp.exitApp()
+    })
+    return () => void h.then((x) => x.remove())
+  }, [tab, go])
 
   const runs = useMemo(() => (db ? listRuns(db) : []), [db, version])
   const nights = useMemo(() => (db ? listNights(db) : []), [db, version])

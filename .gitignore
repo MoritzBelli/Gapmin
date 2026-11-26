@@ -3,3 +3,8 @@ dist/
 .DS_Store
 __pycache__/
 *.local
+.env
+server/data/
+.pytest_cache/
+*.jks
+*.jks.base64
