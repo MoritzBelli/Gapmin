@@ -176,6 +176,28 @@ object Stat {
         return sxy / sxx to sxy / sqrt(sxx * syy)
     }
 
+    /** OLS trend with standard error of the slope (per x unit). Needs at least 8 points. */
+    data class Trend(val n: Int, val slope: Double, val r: Double, val se: Double)
+
+    fun trend(pts: List<Pair<Double, Double>>): Trend? {
+        if (pts.size < 8) return null
+        val mx = pts.sumOf { it.first } / pts.size
+        val my = pts.sumOf { it.second } / pts.size
+        var sxy = 0.0; var sxx = 0.0; var syy = 0.0
+        for ((x, y) in pts) { sxy += (x - mx) * (y - my); sxx += (x - mx) * (x - mx); syy += (y - my) * (y - my) }
+        if (sxx == 0.0 || syy == 0.0) return null
+        val slope = sxy / sxx
+        val resid = maxOf(0.0, syy - slope * sxy) / (pts.size - 2)
+        return Trend(pts.size, slope, sxy / sqrt(sxx * syy), sqrt(resid / sxx))
+    }
+
+    /** Cohen's d with pooled SD (a − b). */
+    fun cohenD(a: Desc, b: Desc): Double? {
+        if (a.n < 5 || b.n < 5) return null
+        val sp = sqrt(((a.n - 1) * a.sd * a.sd + (b.n - 1) * b.sd * b.sd) / (a.n + b.n - 2))
+        return if (sp < 1e-9) null else (a.mean - b.mean) / sp
+    }
+
     /** Bland-Altman: mean difference (a − b) and its SD. */
     fun blandAltman(pairs: List<Pair<Double, Double>>): Pair<Double, Double>? {
         if (pairs.size < 5) return null

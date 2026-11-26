@@ -10,6 +10,10 @@ import de.moritzbelli.gapmin.core.Health
 import de.moritzbelli.gapmin.core.JdbcSql
 import de.moritzbelli.gapmin.core.Repo
 import de.moritzbelli.gapmin.core.Schema
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -40,10 +44,12 @@ class ScreenshotTest {
 
     private val actions = DataActions({}, {}, {}, { _, _, _ -> }, {}, {})
 
-    private fun shot(name: String, tab: Tab, run: String? = null) {
-        compose.setContent {
-            GapminTheme { GapminApp(state, actions, { _, cb -> cb(emptyList()) }, { d, cb -> cb(Health.daySeries(db, d)) }, {}, initialTab = tab, initialRun = run) }
-        }
+    private fun shot(name: String, tab: Tab, run: String? = null) = render(name) {
+        GapminApp(state, actions, { _, cb -> cb(emptyList()) }, { d, cb -> cb(Health.daySeries(db, d)) }, {}, initialTab = tab, initialRun = run)
+    }
+
+    private fun render(name: String, content: @androidx.compose.runtime.Composable () -> Unit) {
+        compose.setContent { GapminTheme { content() } }
         compose.mainClock.advanceTimeBy(3000)
         compose.waitForIdle()
         val view = compose.activity.window.decorView
@@ -57,5 +63,15 @@ class ScreenshotTest {
     @Test fun detail() = shot("2-lauf-detail", Tab.RUNS, state.runs.first().id)
     @Test fun sleep() = shot("3-schlaf", Tab.SLEEP)
     @Test fun health() = shot("4-health", Tab.HEALTH)
+    @Test fun trendsSleep() = render("6-trends-schlaf") {
+        androidx.compose.foundation.layout.Box(
+            androidx.compose.ui.Modifier.fillMaxSize().background(G.bg).padding(16.dp),
+        ) { SleepTrends(state.nights, 0) }
+    }
+    @Test fun trendsHealth() = render("7-trends-health") {
+        androidx.compose.foundation.layout.Box(
+            androidx.compose.ui.Modifier.fillMaxSize().background(G.bg).padding(16.dp),
+        ) { HealthTrends(state.days, 0) }
+    }
     @Test fun data() = shot("5-daten", Tab.DATA)
 }

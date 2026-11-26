@@ -77,6 +77,7 @@ Zahlen: Klasse `.num` (leicht, enge Laufweite), Einheit als `<span class="unit">
 - **Keine Seitentitel.** Der aktive Bereich steht in der Navigation. Oben stehen höchstens Summen (`Totals`) oder der Tag-/Nacht-Wähler.
 - **Navigation**: Läufe, Schlaf, Health, Daten.
 - **Messwert-Zeile** (`MetricRow`, `ui/Metrics.kt`): Name, Wert mit Einheit, z-Balken (−3 bis +3 SD, ±1 SD hell), Δ und z zur Baseline (28 vorherige Werte), Baseline-Mittel ± SD und n. Antippen klappt Verlauf (90 Werte) und Statistik auf (n, Median, IQR, Min–Max, SD, CV, OLS-Trend, r). Methodik: `docs/research/gesundheit.md`.
+- **Langzeittrends** (`TrendsCard`, `ui/Trends.kt`): Messgröße per Chip, Zeitraum per Segmented Control; Wochenmittel mit SD-Band, Tagespunkte, gestrichelter Trend, Kennzahlen mit 95 %-KI und 30-Tage-Blockvergleich (Δ, Cohen's d).
 - **Tageswähler** (`DayStrip`): Balken pro Tag/Nacht, neuester rechts.
 
 ## Datenvisualisierung (für kommende Ansichten)

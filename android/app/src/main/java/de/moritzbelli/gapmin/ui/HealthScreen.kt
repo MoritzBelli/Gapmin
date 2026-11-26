@@ -149,6 +149,21 @@ private fun activityDefs(week: Map<Long, Double>) = listOf(
     ),
 )
 
+/** Rolling 7-day sum of weighted intensity minutes, keyed by epoch day. */
+private fun weekIntensity(days: List<HealthDay>): Map<Long, Double> {
+    val im = days.associate { it.epochDay to it.imWeighted }
+    return days.associate { x -> x.epochDay to (0L..6L).sumOf { im[x.epochDay - it] ?: 0.0 } }
+}
+
+@Composable
+internal fun HealthTrends(days: List<HealthDay>, selected: Int) {
+    val defs = remember(days) {
+        val a = activityDefs(weekIntensity(days))
+        listOf(HEART_DEFS[0], HEART_DEFS[1], HEART_DEFS[4], STRESS_DEFS[0], STRESS_DEFS[2], STRESS_DEFS[4], a[0], a[2], BREATH_DEFS[2])
+    }
+    TrendsCard("Langzeittrends", defs, days, selected, dayIndex, dayDate)
+}
+
 @Composable
 fun HealthScreen(
     days: List<HealthDay>,
@@ -160,11 +175,7 @@ fun HealthScreen(
     onGoToData: () -> Unit,
 ) {
     val d = days.getOrNull(selected)
-    val week = remember(days) {
-        val im = days.associate { it.epochDay to it.imWeighted }
-        days.associate { x -> x.epochDay to (0L..6L).sumOf { im[x.epochDay - it] ?: 0.0 } }
-    }
-    val activity = remember(week) { activityDefs(week) }
+    val activity = remember(days) { activityDefs(weekIntensity(days)) }
 
     LazyColumn(
         state = listState,
@@ -194,6 +205,7 @@ fun HealthScreen(
         }
         item(key = "day") { DayCard(d, d.date == LocalDate.now().toString(), loadDay) }
         item(key = "hrv") { HrvCard(days, selected) }
+        item(key = "trends") { HealthTrends(days, selected) }
         item(key = "heart") { MetricGroup("Herz-Kreislauf", HEART_DEFS, days, selected, dayDate, dayIndex) }
         item(key = "stress") { MetricGroup("Stress & Body Battery", STRESS_DEFS, days, selected, dayDate, dayIndex) }
         item(key = "activity") { MetricGroup("Aktivität", activity, days, selected, dayDate, dayIndex) }

@@ -189,6 +189,16 @@ private val BREATHING_DEFS = listOf(
     MetricDef<SleepNight>("Anteil SpO2 < 90 %", { it.physiology.spo2Below90?.times(100) }, unit = "%", digits = 1, better = -1, color = G.oxygen),
 )
 
+/** Metrics offered in the long-term trend card. */
+private val SLEEP_TRENDS = listOf(
+    SCORE_DEFS[0], TIMING_DEFS[0], TIMING_DEFS[4], TIMING_DEFS[5], CONTINUITY_DEFS[0], CONTINUITY_DEFS[2],
+    ARCH_DEFS[0], ARCH_DEFS[1], AUTONOMIC_DEFS[0], AUTONOMIC_DEFS[2], AUTONOMIC_DEFS[4],
+)
+
+@Composable
+internal fun SleepTrends(nights: List<SleepNight>, selected: Int) =
+    TrendsCard("Langzeittrends", SLEEP_TRENDS, nights, selected, nightDay, nightDate)
+
 // ---- score derivation texts --------------------------------------------------------------------
 
 private class CompInfo(val title: String, val what: String, val formula: String, val source: String)
@@ -297,6 +307,7 @@ fun SleepScreen(
         item(key = "strip") { NightStrip(nights, selected, onSelect) }
         item(key = "score") { ScoreCard(nights, selected) }
         item(key = "hypno") { HypnoCard(nights, selected) }
+        item(key = "trends") { SleepTrends(nights, selected) }
         item(key = "derivation") { DerivationCard(n) }
         item(key = "timing") { MetricGroup("Dauer & Timing", TIMING_DEFS, nights, selected, nightDate, nightDay) }
         item(key = "continuity") { MetricGroup("Kontinuität", CONTINUITY_DEFS, nights, selected, nightDate, nightDay) }

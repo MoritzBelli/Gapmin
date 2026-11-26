@@ -11,6 +11,7 @@ Kein Medizinprodukt, keine Diagnosen.
 - **z = (x − μ) / σ**. Der Balken zeigt z von −3 bis +3, hell hinterlegt ±1 SD, Striche bei ±2 SD.
 - **Farben**: grün oder rot, wenn |z| ≥ 0,5 in der durch die Evidenz gegebenen Richtung (z. B. Ruhepuls niedriger = besser). Für Größen ohne Richtung (Atemfrequenz, Puls-Maximum) orange ab |z| ≥ 1,5.
 - **Verlauf** (Zeile antippen): 90 Tage, Einzelwerte als Punkte, gleitendes 7-Tage-Mittel als Linie, Baseline-Band, Literaturgrenzen gestrichelt. Dazu n, Median, IQR (Quantil Typ 7), Spannweite, SD, Variationskoeffizient und linearer Trend (OLS, Steigung pro 30 Tage) mit Pearson-r gegen die Zeit.
+- **Langzeittrends** (Karte in Schlaf und Health, Zeitraum 90 T / 180 T / 1 Jahr, rückwärts ab dem gewählten Tag): Wochenmittel (Kalenderwochen) mit ±1 SD (ab 3 Werten je Woche), Tageswerte als Punkte, OLS-Gerade auf den Tageswerten. Kennzahlen n, Ø, SD, Median, Steigung pro 30 Tage mit 95 %-Konfidenzintervall (±1,96·SE der Steigung, Normalnäherung, ohne Korrektur für Autokorrelation – das Intervall ist daher eher zu eng), r und R². Trend gilt als belegt, wenn das KI die 0 ausschließt. Darunter Blöcke zu 30 Tagen mit n, Ø ± SD, Differenz zum davor liegenden Block und **Cohen's d** (gepoolte SD; |d| ≥ 0,5 mittlerer Effekt nach Cohen 1988), erst ab je 5 Werten.
 - **GSS gegen Garmin**: Pearson-r und Bland-Altman (mittlere Differenz ± 1 SD) über die letzten 90 Nächte.
 
 ## 2. Kennzahlen und Referenzen
@@ -38,6 +39,7 @@ HRV-Status (Gadgetbridge `statusnum`): 1 schlecht, 2 niedrig, 3 unausgeglichen, 
 
 ## 4. Quellen
 
+- Cohen J. *Statistical Power Analysis for the Behavioral Sciences*, 2. Aufl. Erlbaum 1988
 - Plews DJ et al. Heart rate variability in elite triathletes … *Eur J Appl Physiol* 2012. PubMed 22367011; Plews DJ et al. Training adaptation and heart rate variability in elite endurance athletes. *Sports Med* 2013;43:773–781
 - Paluch AE et al. Daily steps and all-cause mortality: a meta-analysis of 15 international cohorts. *Lancet Public Health* 2022;7(3):e219–e228. doi:10.1016/S2468-2667(21)00302-9
 - Bull FC et al. World Health Organization 2020 guidelines on physical activity and sedentary behaviour. *Br J Sports Med* 2020;54:1451–1462. doi:10.1136/bjsports-2020-102955

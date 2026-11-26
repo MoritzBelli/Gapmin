@@ -65,6 +65,10 @@ object ImportChecks {
         val series = Health.daySeries(db, days[1].date)
         expect(series.stress.isNotEmpty() && series.bb.isNotEmpty() && series.hr.isNotEmpty(), "day series")
         expect(Stat.desc(listOf(1.0, 2.0, 3.0, 4.0))!!.median == 2.5, "median")
+        val tr = Stat.trend((0 until 20).map { it.toDouble() to 2.0 * it + 1 + (if (it % 2 == 0) 0.1 else -0.1) })!!
+        expect(kotlin.math.abs(tr.slope - 2.0) < 0.02 && tr.r > 0.999 && tr.se < 0.01, "trend ${tr.slope} ${tr.r} ${tr.se}")
+        val dd = Stat.cohenD(Stat.desc(listOf(5.0, 6.0, 7.0, 8.0, 9.0))!!, Stat.desc(listOf(1.0, 2.0, 3.0, 4.0, 5.0))!!)!!
+        expect(kotlin.math.abs(dd - 4.0 / kotlin.math.sqrt(2.5)) < 1e-9, "cohen d $dd")
 
         val runs = Repo.listRuns(db)
         log("runs ${runs.size}, first ${runs.first().name} ${Fmt.km(runs.first().distanceM)} km ${Fmt.pace(runs.first().paceSPerKm)} /km, preview ${runs.first().preview.size}")
