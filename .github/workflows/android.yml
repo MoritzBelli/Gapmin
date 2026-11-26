@@ -4,11 +4,11 @@ name: Android
 # release:  Actions → Android → "Run workflow" with release = true, or push a tag v1.2.3
 on:
   push:
-    branches: [main]
+    branches: ['**']
     tags: ['v*']
-    paths: ['web/**', '.github/workflows/android.yml']
+    paths: ['android/**', 'web/public/demo/**', '.github/workflows/android.yml']
   pull_request:
-    paths: ['web/**']
+    paths: ['android/**']
   workflow_dispatch:
     inputs:
       release:
@@ -16,7 +16,7 @@ on:
         type: boolean
         default: false
       version:
-        description: 'Versionsname, z. B. 0.2.0 (leer = 0.1.<Build-Nummer>)'
+        description: 'Versionsname, z. B. 0.2.0 (leer = 0.2.<Build-Nummer>)'
         required: false
 
 permissions:
@@ -27,22 +27,18 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: web
+        working-directory: android
     env:
       IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release) }}
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
 
       # ubuntu-latest ships the Android SDK (ANDROID_HOME); Gradle fetches missing platforms itself
       - name: Version
@@ -50,26 +46,58 @@ jobs:
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then NAME="${GITHUB_REF#refs/tags/v}";
           elif [[ -n "${{ inputs.version }}" ]]; then NAME="${{ inputs.version }}";
-          else NAME="0.1.${{ github.run_number }}"; fi
+          else NAME="0.2.${{ github.run_number }}"; fi
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "GAPMIN_VERSION_NAME=$NAME" >> "$GITHUB_ENV"
-          echo "GAPMIN_VERSION_CODE=${{ github.run_number }}" >> "$GITHUB_ENV"
+          # stays above the version codes of the former Capacitor builds
+          echo "GAPMIN_VERSION_CODE=$((100 + ${{ github.run_number }}))" >> "$GITHUB_ENV"
 
-      - run: npm ci
-      - run: TZ=Europe/Berlin npx vitest run
-      - run: npm run build
-      - run: npx cap sync android
+      - name: Unit tests (import chain with the demo export)
+        run: |
+          set -o pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon testDebugUnitTest --tests 'de.moritzbelli.gapmin.core.*' 2>&1 | tee build.log
 
       - name: Build debug APK (check)
         if: env.IS_RELEASE != 'true'
-        working-directory: web/android
-        run: ./gradlew --no-daemon assembleDebug
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon assembleDebug 2>&1 | tee -a build.log
+
+      - name: Report build errors
+        if: failure()
+        run: |
+          grep -E '^e: ' build.log | head -10 | while IFS= read -r l; do echo "::error title=Kotlin::${l:0:900}"; done
+          for f in app/build/test-results/testDebugUnitTest/*.xml; do
+            [ -f "$f" ] && grep -o '<failure message="[^"]*' "$f" | head -3 | while IFS= read -r l; do echo "::error title=Test::${l:0:900}"; done
+          done
+          ctx=$(grep -A12 'What went wrong' build.log | head -14 | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')
+          [ -n "$ctx" ] && echo "::error title=Gradle::${ctx:0:3000}"
+          exit 0
+
+      # Screenshots of the main screens (Robolectric), pushed to the branch ci-screenshots for review
+      - name: Screenshots
+        if: env.IS_RELEASE != 'true' && github.event_name == 'push'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon testDebugUnitTest --tests 'de.moritzbelli.gapmin.ui.ScreenshotTest' 2>&1 | tee shots.log || {
+            grep -E '^e: |Exception|Error' shots.log | head -8 | while IFS= read -r l; do echo "::warning title=Screenshots::${l:0:900}"; done
+            for f in app/build/test-results/testDebugUnitTest/*Screenshot*.xml; do
+              [ -f "$f" ] && grep -o '<failure message="[^"]*' "$f" | head -2 | while IFS= read -r l; do echo "::warning title=Screenshot-Test::${l:0:900}"; done
+            done
+          }
+          cd app/build/screenshots
+          git init -q . && git checkout -q -b ci-screenshots
+          git add *.png
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "Screenshots ${GITHUB_SHA::7}"
+          git push -fq "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" ci-screenshots
 
       - uses: actions/upload-artifact@v4
         if: env.IS_RELEASE != 'true'
         with:
           name: gapmin-debug-apk
-          path: web/android/app/build/outputs/apk/debug/*.apk
+          path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 14
 
       - name: Prepare signing key
@@ -86,7 +114,6 @@ jobs:
 
       - name: Build signed release APK
         if: env.IS_RELEASE == 'true'
-        working-directory: web/android
         env:
           GAPMIN_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           GAPMIN_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}

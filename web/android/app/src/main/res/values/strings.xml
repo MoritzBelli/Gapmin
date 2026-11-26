@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Gapmin</string>
-    <string name="title_activity_main">Gapmin</string>
-    <string name="package_name">de.moritzbelli.gapmin</string>
-    <string name="custom_url_scheme">de.moritzbelli.gapmin</string>
-</resources>
