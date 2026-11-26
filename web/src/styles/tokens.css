@@ -33,6 +33,11 @@
   --run-intervals: #f472b6;
   --run-trail: #facc15;
   --glow-strength: 0.45; /* opacity of the blurred halo under data lines */
+  /* Sleep stages (hypnogram) */
+  --stage-deep: #7c6cff;
+  --stage-light: #4fa8ff;
+  --stage-rem: #e879f9;
+  --stage-awake: #ffb36b;
   /* Heart-rate zones Z1-Z5: sequential cool -> hot */
   --zone-1: #6b7a8f;
   --zone-2: #5aa9e6;

@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
-"""Generate synthetic running activities (GPX + manifest) for the Gapmin dashboard.
+"""Synthetic running routes (shapes, timestamps, HR, elevation) and GPX output.
 
-The output mimics what the real pipeline will later produce from the Gadgetbridge
-export: one GPX file per run plus a `runs.json` manifest with summary metrics.
-
-Usage:
-    python3 scripts/generate_sample_data.py [--count 60] [--seed 42] [--out web/public/sample-data]
+Used by make_demo_export.py to build a realistic Gadgetbridge export for testing.
 """
 
 from __future__ import annotations
@@ -329,35 +325,3 @@ def to_gpx(meta: dict, points: list[Point]) -> str:
         + "\n".join(rows)
         + "\n    </trkseg>\n  </trk>\n</gpx>\n"
     )
-
-
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--count", type=int, default=60)
-    ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--out", type=Path, default=Path(__file__).resolve().parent.parent / "web/public/sample-data")
-    args = ap.parse_args()
-
-    rng = random.Random(args.seed)
-    (args.out / "gpx").mkdir(parents=True, exist_ok=True)
-    for old in (args.out / "gpx").glob("*.gpx"):
-        old.unlink()
-
-    # Fixed anchor so the data is reproducible; ~3-4 runs per week going back from it.
-    day = datetime(2026, 11, 25, tzinfo=timezone.utc)
-    runs = []
-    for i in range(args.count):
-        day -= timedelta(days=rng.choice([1, 1, 2, 2, 2, 3]))
-        start = day.replace(hour=rng.choice([6, 7, 7, 12, 17, 18, 19]), minute=rng.randrange(0, 60, 5))
-        meta, points = build_run(rng, i, start)
-        (args.out / meta["gpx"]).write_text(to_gpx(meta, points), encoding="utf-8")
-        runs.append(meta)
-
-    runs.sort(key=lambda r: r["start"], reverse=True)
-    (args.out / "runs.json").write_text(json.dumps({"generated": "sample", "runs": runs}, indent=2), encoding="utf-8")
-    total_km = sum(r["distance_m"] for r in runs) / 1000
-    print(f"Wrote {len(runs)} runs ({total_km:.0f} km) to {args.out}")
-
-
-if __name__ == "__main__":
-    main()

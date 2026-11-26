@@ -2,19 +2,6 @@ import type { RouteShape } from '../types'
 
 type LatLon = [number, number]
 
-/** Extract all track points (lat, lon) from a GPX document. */
-export function parseGpxPoints(xml: string): LatLon[] {
-  const doc = new DOMParser().parseFromString(xml, 'application/xml')
-  const pts = doc.getElementsByTagName('trkpt')
-  const out: LatLon[] = []
-  for (let i = 0; i < pts.length; i++) {
-    const lat = parseFloat(pts[i].getAttribute('lat') ?? '')
-    const lon = parseFloat(pts[i].getAttribute('lon') ?? '')
-    if (Number.isFinite(lat) && Number.isFinite(lon)) out.push([lat, lon])
-  }
-  return out
-}
-
 /**
  * Project lat/lon to a square SVG box (equirectangular, corrected for latitude),
  * keep the aspect ratio and centre the route. Points are thinned to `maxPoints`.
@@ -45,22 +32,4 @@ export function toRouteShape(points: LatLon[], size = 100, padding = 8, maxPoint
   const proj = xy.map(([x, y]) => [ox + (x - minX) * scale, oy + (y - minY) * scale] as [number, number])
   const path = proj.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)}`).join('')
   return { path, start: proj[0], end: proj[proj.length - 1] }
-}
-
-const cache = new Map<string, Promise<RouteShape | null>>()
-
-/** Fetch + parse + project a GPX file once; later calls reuse the same promise. */
-export function loadRouteShape(url: string): Promise<RouteShape | null> {
-  let p = cache.get(url)
-  if (!p) {
-    p = fetch(url)
-      .then((r) => {
-        if (!r.ok) throw new Error(`${r.status} ${url}`)
-        return r.text()
-      })
-      .then((xml) => toRouteShape(parseGpxPoints(xml)))
-    p.catch(() => cache.delete(url))
-    cache.set(url, p)
-  }
-  return p
 }

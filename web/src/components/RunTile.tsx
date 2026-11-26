@@ -6,13 +6,12 @@ import { RouteShape } from './RouteShape'
 
 interface Props {
   run: RunSummary
-  dataRoot: string
   index: number
   onOpen: (run: RunSummary, el: HTMLElement) => void
 }
 
-export function RunTile({ run, dataRoot, index, onOpen }: Props) {
-  const t = RUN_TYPES[run.type]
+export function RunTile({ run, index, onOpen }: Props) {
+  const t = RUN_TYPES[run.category]
   return (
     <button
       className="tile"
@@ -22,7 +21,7 @@ export function RunTile({ run, dataRoot, index, onOpen }: Props) {
     >
       <div className="tile-route">
         <span className="type-tag"><i />{t.label}</span>
-        <RouteShape url={dataRoot + run.gpx} strokeWidth={1.2} />
+        <RouteShape points={run.preview} strokeWidth={1.2} />
       </div>
       <div className="tile-when">{formatDate(run.start)} · {formatTime(run.start)}</div>
       <div className="tile-distance num">
@@ -31,7 +30,7 @@ export function RunTile({ run, dataRoot, index, onOpen }: Props) {
       <dl className="tile-stats">
         <div><dt className="label">Zeit</dt><dd>{formatDuration(run.duration_s)}</dd></div>
         <div><dt className="label">Pace</dt><dd>{formatPace(run.avg_pace_s_per_km)}</dd></div>
-        <div><dt className="label">HF</dt><dd>{run.avg_hr}</dd></div>
+        <div><dt className="label">HF</dt><dd>{run.avg_hr ?? '–'}</dd></div>
       </dl>
     </button>
   )

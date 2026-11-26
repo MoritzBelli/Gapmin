@@ -6,14 +6,13 @@ import { RouteShape } from './RouteShape'
 
 interface Props {
   run: RunSummary
-  dataRoot: string
   onClose: () => void
   onPrev?: () => void
   onNext?: () => void
 }
 
-export function RunDetail({ run, dataRoot, onClose, onPrev, onNext }: Props) {
-  const t = RUN_TYPES[run.type]
+export function RunDetail({ run, onClose, onPrev, onNext }: Props) {
+  const t = RUN_TYPES[run.category]
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -32,9 +31,10 @@ export function RunDetail({ run, dataRoot, onClose, onPrev, onNext }: Props) {
   const stats: [string, string, string][] = [
     ['Zeit', formatDuration(run.duration_s), ''],
     ['Ø Pace', formatPace(run.avg_pace_s_per_km), '/km'],
-    ['Ø Herzfrequenz', String(run.avg_hr), 'bpm'],
-    ['Max. Herzfrequenz', String(run.max_hr), 'bpm'],
-    ['Anstieg', String(run.elevation_gain_m), 'm'],
+    ['Ø Herzfrequenz', String(run.avg_hr ?? '–'), 'bpm'],
+    ['Max. Herzfrequenz', String(run.max_hr ?? '–'), 'bpm'],
+    ['Anstieg', String(run.elevation_gain_m ?? '–'), 'm'],
+    ['Aerober Effekt', run.te_aerobic?.toLocaleString('de-DE') ?? '–', ''],
   ]
 
   return (
@@ -42,7 +42,7 @@ export function RunDetail({ run, dataRoot, onClose, onPrev, onNext }: Props) {
       <div className="detail" role="dialog" aria-modal="true" aria-label={run.name}
         style={{ '--type': t.color } as CSSProperties} onClick={(e) => e.stopPropagation()}>
         <div className="detail-route">
-          <RouteShape key={run.id} url={dataRoot + run.gpx} lazy={false} draw={false} strokeWidth={0.55}
+          <RouteShape key={run.id} points={run.preview} draw={false} strokeWidth={0.55}
             style={{ viewTransitionName: 'active-route' }} />
         </div>
         <div className="detail-info">
