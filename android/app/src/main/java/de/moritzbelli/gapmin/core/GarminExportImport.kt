@@ -16,8 +16,8 @@ import kotlin.math.roundToInt
 /**
  * Import of the data export from Garmin Connect ("Export Ihrer Daten") straight from the ZIP Garmin sends.
  *
- * Activities come from DI_CONNECT/DI-Connect-Fitness/*summarizedActivities*.json, their tracks from the .fit files in the
- * nested UploadedFiles_*.zip (matched by start time). Daily values (resting HR, Garmin sleep score, HRV) go into the same
+ * Activities come from the summarizedActivities JSON in DI_CONNECT (folder DI-Connect-Fitness), their tracks from the .fit files in the
+ * nested UploadedFiles zip (matched by start time). Daily values (resting HR, Garmin sleep score, HRV) go into the same
  * tables a Gadgetbridge import fills; every daily record is also kept as raw JSON in `daily_summary`.
  * The export has no sleep-stage or stress/Body-Battery curves, so no Gapmin sleep score is computed for these nights.
  *
