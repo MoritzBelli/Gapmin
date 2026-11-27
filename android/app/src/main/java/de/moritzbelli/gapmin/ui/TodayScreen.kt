@@ -149,6 +149,10 @@ private fun SleepToday(n: SleepNight, sameDay: Boolean, onClick: () -> Unit) {
             Icon(GIcons.Next, null, tint = G.text3, modifier = Modifier.size(16.dp))
         }
         Spacer(Modifier.height(G.s4))
+        if (n.hypnogram.isNotEmpty()) {
+            Hypnogram(n, Modifier.fillMaxWidth().height(96.dp))
+            Spacer(Modifier.height(G.s3))
+        }
         val parts = listOf(
             Triple("Tief", n.deepMin, G.stageDeep),
             Triple("Leicht", n.lightMin, G.stageLight),

@@ -14,6 +14,7 @@ import de.moritzbelli.gapmin.core.HealthDay
 import de.moritzbelli.gapmin.core.GadgetbridgeImport
 import de.moritzbelli.gapmin.core.ImportProgress
 import de.moritzbelli.gapmin.core.Repo
+import de.moritzbelli.gapmin.core.SleepJob
 import de.moritzbelli.gapmin.core.RunSummary
 import de.moritzbelli.gapmin.core.SleepNight
 import de.moritzbelli.gapmin.core.Stats
@@ -54,7 +55,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     init {
-        viewModelScope.launch { refresh() }
+        viewModelScope.launch {
+            // nights from an older Garmin import have no stage timeline yet; fill it in from the stored export data
+            runCatching { db.use { SleepJob.backfillGarminHypnograms(it) } }
+            refresh()
+        }
     }
 
     private suspend fun refresh() {

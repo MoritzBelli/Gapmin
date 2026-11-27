@@ -418,7 +418,7 @@ private fun HypnoCard(nights: List<SleepNight>, selected: Int) {
     GCard {
         CardHead("Hypnogramm", "${Fmt.time(n.bedTs)} – ${Fmt.time(n.outTs)}", info = STAGE_INFO)
         if (n.hypnogram.isEmpty()) {
-            Text("Für diese Nacht liegt nur die Summe der Phasen vor (Garmin-Export), kein Verlauf.", style = T.unit, color = G.text3)
+            Text("Für diese Nacht liegt nur die Summe der Phasen vor, kein zeitlicher Verlauf.", style = T.unit, color = G.text3)
         } else {
             Hypnogram(n, Modifier.fillMaxWidth().height(150.dp))
         }
@@ -609,7 +609,7 @@ internal fun ScoreRing(score: Int, color: Color, modifier: Modifier) {
 }
 
 @Composable
-private fun Hypnogram(n: SleepNight, modifier: Modifier) {
+internal fun Hypnogram(n: SleepNight, modifier: Modifier) {
     val measurer = rememberTextMeasurer()
     val reveal = remember(n.night) { Animatable(0f) }
     LaunchedEffect(n.night) { reveal.animateTo(1f, tween(G.T_DRAW, easing = G.easeOut)) }

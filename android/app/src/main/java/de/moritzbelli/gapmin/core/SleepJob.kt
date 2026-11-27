@@ -2,6 +2,7 @@ package de.moritzbelli.gapmin.core
 
 import java.time.Instant
 import java.time.ZoneId
+import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.roundToLong
 import kotlin.math.sqrt
@@ -134,12 +135,91 @@ object SleepJob {
         return count
     }
 
+    private fun hypnogramOf(segs: List<Segment>, bed: Long): List<List<Long>> =
+        segs.map { listOf(((it.start - bed) / 60.0).roundToLong(), ((it.end - it.start) / 60.0).roundToLong(), it.stage.toLong()) }
+
+    /**
+     * Garmin Connect `sleepLevels` ({startGMT, endGMT, activityLevel}) → stage segments. Garmin numbers the levels
+     * 0 deep, 1 light, 2 REM, 3 awake; because that is not documented, the mapping is checked against the night's own
+     * stage totals and the permutation that fits them best wins (default order on ties).
+     */
+    fun parseGarminLevels(levels: List<Any?>?, deepS: Double, lightS: Double, remS: Double, awakeS: Double): List<Segment> {
+        if (levels == null) return emptyList()
+        val raw = levels.mapNotNull { v ->
+            val m = v.asMap() ?: return@mapNotNull null
+            val a = GarminExportImport.isoToS(m["startGMT"]) ?: return@mapNotNull null
+            val b = GarminExportImport.isoToS(m["endGMT"]) ?: return@mapNotNull null
+            val lv = m["activityLevel"].asDouble()?.roundToLong()?.toInt() ?: return@mapNotNull null
+            if (b <= a) null else Triple(a, b, lv)
+        }.sortedBy { it.first }
+        if (raw.size < 2) return emptyList()
+        val sec = HashMap<Int, Double>()
+        for ((a, b, lv) in raw) sec[lv] = (sec[lv] ?: 0.0) + (b - a)
+        val keys = sec.keys.sorted()
+        val stages = listOf(Stage.DEEP, Stage.LIGHT, Stage.REM, Stage.AWAKE)
+        val totals = mapOf(Stage.DEEP to deepS, Stage.LIGHT to lightS, Stage.REM to remS, Stage.AWAKE to awakeS)
+        val default = mapOf(0 to Stage.DEEP, 1 to Stage.LIGHT, 2 to Stage.REM, 3 to Stage.AWAKE)
+        fun err(map: Map<Int, Int>): Double {
+            val got = HashMap<Int, Double>()
+            for ((lv, s) in sec) map[lv]?.let { got[it] = (got[it] ?: 0.0) + s }
+            return stages.sumOf { abs((got[it] ?: 0.0) - (totals[it] ?: 0.0)) }
+        }
+        var best = default
+        if (keys.size == 4 && keys.all { it in 0..3 } && err(default) > 0.15 * (deepS + lightS + remS + awakeS)) {
+            fun perms(l: List<Int>): List<List<Int>> = if (l.size <= 1) listOf(l) else l.flatMap { x -> perms(l - x).map { listOf(x) + it } }
+            var bestErr = err(default)
+            for (p in perms(stages)) {
+                val m = keys.zip(p).toMap()
+                val e = err(m)
+                if (e < bestErr) { bestErr = e; best = m }
+            }
+        }
+        val out = ArrayList<Segment>()
+        for ((a, b, lv) in raw) {
+            val st = best[lv] ?: continue
+            val last = out.lastOrNull()
+            if (last != null && last.stage == st && last.end == a) last.end = b else out.add(Segment(a, b, st))
+        }
+        return out
+    }
+
+    /**
+     * Nights imported from a Garmin export before the timeline was read have an empty hypnogram. The raw day JSON is still in
+     * daily_summary, so the timeline is filled in afterwards without a new import. Returns the number of nights updated.
+     */
+    fun backfillGarminHypnograms(db: Sql): Int {
+        val rows = db.query("SELECT night, details FROM sleep_nights WHERE device_id = ?", listOf(GarminExport.DEVICE))
+        var n = 0
+        db.transaction {
+            for (r in rows) {
+                val night = r[0].str() ?: continue
+                val details = Json.parse(r[1].str() ?: continue).asMap()?.toMutableMap() ?: continue
+                if ((details["hypnogram"].asList()?.size ?: 0) > 0) continue
+                val raw = db.one("SELECT data FROM daily_summary WHERE date = ? AND kind = 'garmin_sleep'", listOf(night)).str() ?: continue
+                val d = Json.parse(raw).asMap() ?: continue
+                val start = GarminExportImport.isoToS(d["sleepStartTimestampGMT"]) ?: continue
+                val segs = parseGarminLevels(
+                    d["sleepLevels"].asList(),
+                    d["deepSleepSeconds"].asDouble() ?: 0.0, d["lightSleepSeconds"].asDouble() ?: 0.0,
+                    d["remSleepSeconds"].asDouble() ?: 0.0, d["awakeSleepSeconds"].asDouble() ?: 0.0,
+                )
+                if (segs.isEmpty()) continue
+                details["hypnogram"] = hypnogramOf(segs, start)
+                db.exec("UPDATE sleep_nights SET details = ? WHERE night = ? AND device_id = ?", listOf(Json.write(details), night, GarminExport.DEVICE))
+                n++
+            }
+        }
+        return n
+    }
+
     /** One night of a data export that only has totals (no stage timeline), e.g. Garmin Connect. */
     class Summary(
         val night: String, val startTs: Long, val endTs: Long,
         val deepS: Double, val lightS: Double, val remS: Double, val awakeS: Double, val awakeCount: Int,
         val stress: Double?, val resp: Double?, val respMin: Double?, val respMax: Double?,
         val hrv: Double?, val garminScore: Double?,
+        /** Stage timeline (Garmin `sleepLevels`), empty if the export has none. */
+        val levels: List<Segment> = emptyList(),
     )
 
     /**
@@ -172,7 +252,7 @@ object SleepJob {
                         tibMin = tib, tstMin = tst, solMin = 0.0, wasoMin = awakeMin,
                         awakenings = x.awakeCount, awakeningsLong = awakeningsLong, efficiency = tst / tib,
                         deepMin = deepMin, lightMin = lightMin, remMin = remMin, awakeMin = awakeMin,
-                        remLatencyMin = null, deepFirstHalfShare = null, remSecondHalfShare = null, segments = emptyList(),
+                        remLatencyMin = null, deepFirstHalfShare = null, remSecondHalfShare = null, segments = x.levels,
                     )
                     val p = NightPhysiology(
                         hrAvg = null, hrMin = null, hrMinTs = null, hrDayAvg = null, hrDip = null,
@@ -205,7 +285,7 @@ object SleepJob {
 
                     val r = Sleep.scoreNight(m, p, b, Regularity(onsets.size, spread, mid))
                     val details = linkedMapOf(
-                        "hypnogram" to emptyList<Any>(),
+                        "hypnogram" to hypnogramOf(x.levels, x.startTs),
                         "physiology" to linkedMapOf(
                             "hrvAvg" to p.hrvAvg, "stressAvg" to p.stressAvg, "respAvg" to p.respAvg, "respMin" to p.respMin, "respMax" to p.respMax,
                         ),

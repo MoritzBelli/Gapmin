@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
@@ -78,6 +79,9 @@ private fun buckets(pts: List<Pair<Long, Double>>, monthly: Boolean): List<Bucke
         val sd = if (vs.size >= 3) sqrt(vs.sumOf { (it - m) * (it - m) } / (vs.size - 1)) else null
         Bucket(bucketOf(l.first().first, monthly).second, vs.size, m, sd, vs.min(), vs.max(), l.first().first, l.last().first)
     }
+
+/** Distance between two monthly means above which the history has a hole (more than one missing month). */
+private const val GAP_DAYS = 50.0
 
 private val RANGES = listOf(90 to "3 M", 180 to "6 M", 365 to "1 J", 0 to "Alles")
 
@@ -164,9 +168,22 @@ fun <T> TrendsCard(
         Spacer(Modifier.height(G.s4))
 
         if (pts.size < 8 || bks.size < 2) {
-            Text("Zu wenige Werte für einen Trend (mind. 8 Messungen im Zeitraum).", style = T.sm, color = G.text3, modifier = Modifier.padding(vertical = G.s4))
-            if (maxBack > 0 || back > 0) WindowNavigator(overview, oldest, ref, winStart, winEnd, def.color, back > 0, { endBack = 0 }) { c ->
-                endBack = (ref - (c + win / 2.0)).roundToInt().coerceIn(0, maxBack); cursor = null
+            // keep the layout identical to the chart case so the minimap does not jump under the finger while dragging through a gap
+            Text(
+                "${dayText(winStart)}–${dayText(winEnd)} · n ${pts.size}",
+                style = T.unit, color = G.text3, maxLines = 1, modifier = Modifier.padding(bottom = G.s2),
+            )
+            Box(Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) {
+                Text(
+                    if (pts.isEmpty()) "Keine Daten in diesem Zeitraum (Lücke in der Aufzeichnung)." else "Zu wenige Werte für einen Trend (mind. 8 Messungen im Zeitraum).",
+                    style = T.sm, color = G.text3,
+                )
+            }
+            if (maxBack > 0 || back > 0) {
+                Spacer(Modifier.height(G.s3))
+                WindowNavigator(overview, oldest, ref, winStart, winEnd, def.color, back > 0, { endBack = 0; cursor = null }) { center ->
+                    endBack = (ref - (center + win / 2.0)).roundToInt().coerceIn(0, maxBack); cursor = null
+                }
             }
             return@GCard
         }
@@ -289,23 +306,34 @@ private fun WindowNavigator(
             drawRoundRect(color.copy(alpha = 0.10f), Offset(x0, 0f), Size(x1 - x0, size.height), CornerRadius(8.dp.toPx()))
             drawRoundRect(G.hairlineStrong, Offset(x0, 0f), Size(x1 - x0, size.height), CornerRadius(8.dp.toPx()), style = Stroke(1.dp.toPx()))
             // history
+            // a month without data is a gap: break the line there instead of drawing a straight bridge
             val path = Path()
-            overview.forEachIndexed { i, b -> if (i == 0) path.moveTo(x(b.day), y(b.mean)) else path.lineTo(x(b.day), y(b.mean)) }
+            var prevDay = Double.NEGATIVE_INFINITY
+            overview.forEach { b ->
+                if (b.day - prevDay > GAP_DAYS) {
+                    path.moveTo(x(b.day), y(b.mean))
+                    if (prevDay > Double.NEGATIVE_INFINITY) {
+                        drawLine(G.hairlineStrong, Offset(x(prevDay), size.height - pad), Offset(x(b.day), size.height - pad), 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f, 5f)))
+                    }
+                } else path.lineTo(x(b.day), y(b.mean))
+                prevDay = b.day
+            }
             drawPath(path, color.copy(alpha = 0.7f), style = Stroke(1.2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            for (b in overview) drawCircle(color.copy(alpha = 0.7f), 1.2.dp.toPx(), Offset(x(b.day), y(b.mean)))
         }
-        if (showNow) {
-            Spacer(Modifier.width(G.s3))
-            Text(
-                "Jetzt",
-                style = T.unit.copy(fontSize = 11.5.sp),
-                color = G.text1,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .border(1.dp, G.hairlineStrong, CircleShape)
-                    .pressable(onNow, haptic = true)
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-            )
-        }
+        // always laid out (invisible when at "now") so the minimap keeps its width while dragging
+        Spacer(Modifier.width(G.s3))
+        Text(
+            "Jetzt",
+            style = T.unit.copy(fontSize = 11.5.sp),
+            color = G.text1,
+            modifier = Modifier
+                .alpha(if (showNow) 1f else 0f)
+                .clip(CircleShape)
+                .border(1.dp, G.hairlineStrong, CircleShape)
+                .then(if (showNow) Modifier.pressable(onNow, haptic = true) else Modifier)
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+        )
     }
 }
 
@@ -410,7 +438,8 @@ private fun TrendCanvas(
             )
         }
         val line = Path()
-        bks.forEachIndexed { i, w -> if (i == 0) line.moveTo(x(w.day), y(w.mean)) else line.lineTo(x(w.day), y(w.mean)) }
+        val maxStep = if (bks.size > 1) maxOf(bks.zipWithNext { a, b -> b.day - a.day }.sorted()[bks.size / 2] * 2.5, 10.0) else GAP_DAYS
+        bks.forEachIndexed { i, w -> if (i == 0 || w.day - bks[i - 1].day > maxStep) line.moveTo(x(w.day), y(w.mean)) else line.lineTo(x(w.day), y(w.mean)) }
         drawPath(line, def.color.copy(alpha = 0.18f), style = Stroke(5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
         drawPath(line, def.color, style = Stroke(1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
         bks.lastOrNull()?.let {

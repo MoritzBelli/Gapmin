@@ -19,7 +19,7 @@ import kotlin.math.roundToInt
  * Activities come from the summarizedActivities JSON in DI_CONNECT (folder DI-Connect-Fitness), their tracks from the .fit files in the
  * nested UploadedFiles zip (matched by start time). Daily values (resting HR, Garmin sleep score, HRV) go into the same
  * tables a Gadgetbridge import fills; every daily record is also kept as raw JSON in `daily_summary`.
- * The export has no sleep-stage or stress/Body-Battery curves, so no Gapmin sleep score is computed for these nights.
+ * The export has no stress/Body-Battery curves; the stage timeline (`sleepLevels`) is used when present.
  *
  * JSON files are streamed element by element and FIT files are read one at a time, so a multi-GB export stays within
  * phone memory. Re-importing is idempotent (everything is upserted).
@@ -31,7 +31,7 @@ object GarminExport {
 }
 
 class GarminExportImport(private val db: Sql) {
-    private companion object {
+    companion object {
         const val TOLERANCE_S = 120L
         val DEFAULT_SCALES = mapOf("distance" to 100.0, "duration" to 1000.0, "elevation" to 100.0)
         val KINDS = mapOf(
@@ -305,6 +305,11 @@ class GarminExportImport(private val db: Sql) {
                                                     stress = d["avgSleepStress"].asDouble(), resp = d["averageRespiration"].asDouble(),
                                                     respMin = d["lowestRespiration"].asDouble(), respMax = d["highestRespiration"].asDouble(),
                                                     hrv = null, garminScore = score,
+                                                    levels = SleepJob.parseGarminLevels(
+                                                        d["sleepLevels"].asList(),
+                                                        d["deepSleepSeconds"].asDouble() ?: 0.0, d["lightSleepSeconds"].asDouble() ?: 0.0,
+                                                        d["remSleepSeconds"].asDouble() ?: 0.0, d["awakeSleepSeconds"].asDouble() ?: 0.0,
+                                                    ),
                                                 ),
                                             )
                                         }
@@ -340,7 +345,7 @@ class GarminExportImport(private val db: Sql) {
             db,
             sleeps.map { x ->
                 val h = (hrv[x.night]?.get("last") as? Double)
-                SleepJob.Summary(x.night, x.startTs, x.endTs, x.deepS, x.lightS, x.remS, x.awakeS, x.awakeCount, x.stress, x.resp, x.respMin, x.respMax, h, x.garminScore)
+                SleepJob.Summary(x.night, x.startTs, x.endTs, x.deepS, x.lightS, x.remS, x.awakeS, x.awakeCount, x.stress, x.resp, x.respMin, x.respMax, h, x.garminScore, x.levels)
             },
             GarminExport.DEVICE,
         )
