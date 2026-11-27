@@ -39,9 +39,15 @@ class GarminExportZipTest {
                     ("""[{"summarizedActivitiesExport":[""" + acts.joinToString(",") + "]}]").toByteArray(),
                 "DI_CONNECT/DI-Connect-Uploaded-Files/UploadedFiles_0-_Part1.zip" to inner,
                 "DI_CONNECT/DI-Connect-Aggregator/UDSFile_2025-05-01_2025-05-06.json" to
-                    """[{"calendarDate":"2025-05-01","totalSteps":9000,"restingHeartRate":52,"restingHeartRateTimestamp":1746100000000}]""".toByteArray(),
+                    ("""[{"calendarDate":"2025-05-01","totalSteps":9000,"activeKilocalories":420.0,"moderateIntensityMinutes":30,"vigorousIntensityMinutes":10,""" +
+                        """"minHeartRate":45,"maxHeartRate":160,"restingHeartRate":52,"restingHeartRateTimestamp":1746100000000,""" +
+                        """"allDayStress":{"aggregatorList":[{"type":"TOTAL","averageStressLevel":30,"maxStressLevel":90,"restDuration":3600,"lowDuration":7200,"mediumDuration":3600,"stressDuration":0}]},""" +
+                        """"bodyBattery":{"chargedValue":60,"drainedValue":55,"bodyBatteryStatList":[{"bodyBatteryStatType":"HIGHEST","statsValue":95},{"bodyBatteryStatType":"LOWEST","statsValue":20}]},""" +
+                        """"respiration":{"avgWakingRespirationValue":15.0,"lowestRespirationValue":10.0,"highestRespirationValue":22.0}}]""").toByteArray(),
                 "DI_CONNECT/DI-Connect-Wellness/2025-05-01_2025-05-06_123_sleepData.json" to
-                    """[{"retro":true},{"calendarDate":"2025-05-01","sleepEndTimestampGMT":"2025-05-01T05:30:00.0","deepSleepSeconds":4800,"sleepScores":{"overallScore":77}}]""".toByteArray(),
+                    ("""[{"retro":true},{"calendarDate":"2025-05-01","sleepStartTimestampGMT":"2025-04-30T21:30:00.0","sleepEndTimestampGMT":"2025-05-01T05:30:00.0",""" +
+                        """"deepSleepSeconds":4800,"lightSleepSeconds":14400,"remSleepSeconds":5400,"awakeSleepSeconds":1800,"awakeCount":4,""" +
+                        """"avgSleepStress":18.0,"averageRespiration":14.0,"lowestRespiration":11.0,"highestRespiration":18.0,"sleepScores":{"overallScore":77}}]""").toByteArray(),
                 "DI_CONNECT/DI-Connect-Wellness/2025-05-01_2025-05-06_123_healthStatusData.json" to
                     """[{"calendarDate":"2025-05-01","metrics":[{"type":"HRV","value":60.0,"baselineLowerLimit":50.0,"baselineUpperLimit":80.0,"status":"IN_RANGE"}]}]""".toByteArray(),
                 "DI_CONNECT/DI-Connect-Metrics/TrainingReadinessDTO_20250501_20250506_1.json" to
@@ -81,6 +87,34 @@ class GarminExportZipTest {
             assertEquals(listOf("garmin_endurance", "garmin_health", "garmin_readiness", "garmin_sleep", "garmin_uds"), kinds)
             assertEquals("2025-05-01", db.one("SELECT date FROM daily_summary WHERE kind = 'garmin_endurance'").str())
             assertTrue(db.one("SELECT data FROM daily_summary WHERE kind = 'garmin_uds'").str()!!.contains("\"totalSteps\":9000"))
+
+            // sleep night from the totals (no stage timeline): scored like a real night, without hypnogram
+            val nights = Repo.listNights(db)
+            assertEquals(1, nights.size)
+            val n = nights.single()
+            assertEquals("2025-05-01", n.night)
+            assertEquals(410.0, n.tstMin, 1e-6)
+            assertEquals(80.0, n.deepMin, 1e-6)
+            assertEquals(77, n.garminScore)
+            assertEquals(60.0, n.physiology.hrvAvg!!, 1e-6)
+            assertTrue(n.hypnogram.isEmpty())
+            assertTrue(n.score in 1..100)
+
+            // health day: values that have no samples come from the export's daily record
+            val day = Health.listDays(db, 100_000).single { it.date == "2025-05-01" }
+            assertEquals(9000.0, day.steps!!, 1e-6)
+            assertEquals(420.0, day.activeKcal!!, 1e-6)
+            assertEquals(30.0, day.imModerate!!, 1e-6)
+            assertEquals(10.0, day.imVigorous!!, 1e-6)
+            assertEquals(30.0, day.stressAvg!!, 1e-6)
+            assertEquals(90.0, day.stressMax!!, 1e-6)
+            assertEquals(3600.0 / 14400, day.stressRest!!, 1e-6)
+            assertEquals(95.0, day.bbMax!!, 1e-6)
+            assertEquals(20.0, day.bbMin!!, 1e-6)
+            assertEquals(60.0, day.bbCharged!!, 1e-6)
+            assertEquals(55.0, day.bbDrained!!, 1e-6)
+            assertEquals(15.0, day.respAvg!!, 1e-6)
+            assertEquals(52.0, day.restingHr!!, 1e-6)
         }
     }
 }

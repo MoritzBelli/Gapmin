@@ -84,7 +84,7 @@ object Repo {
         db.query("SELECT ts, dist_m, speed, hr, ele FROM track_points WHERE activity_id = ? ORDER BY ts", listOf(activityId))
             .map { TrackSample(it[0].lng()!!, it[1].num(), it[2].num(), it[3].num(), it[4].num()) }
 
-    fun listNights(db: Sql, limit: Int = 400): List<SleepNight> {
+    fun listNights(db: Sql, limit: Int = 3650): List<SleepNight> {
         val cols = listOf(
             "night", "bed_ts", "onset_ts", "wake_ts", "out_ts", "tib_min", "tst_min", "sol_min", "waso_min", "awakenings",
             "awakenings_long", "efficiency", "deep_min", "light_min", "rem_min", "awake_min", "midpoint_min", "regularity_sd",

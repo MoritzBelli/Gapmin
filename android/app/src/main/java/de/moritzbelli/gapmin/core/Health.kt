@@ -41,7 +41,7 @@ object Health {
     }
 
     /** One row per day with any data, newest first. */
-    fun listDays(db: Sql, days: Int = 400): List<HealthDay> {
+    fun listDays(db: Sql, days: Int = 3650): List<HealthDay> {
         val from = System.currentTimeMillis() / 1000 - days * 86400L
         val acc = java.util.TreeMap<String, Acc>(reverseOrder())
         fun put(d: String, k: String, x: Double?) { acc.getOrPut(d) { Acc() }.v[k] = x }
@@ -112,6 +112,44 @@ object Health {
             val d = r[0].str() ?: return@forEach
             put(d, "hrvNight", r[1].num()); put(d, "hrvWeekly", r[2].num())
             put(d, "hrvLow", r[3].num()); put(d, "hrvHigh", r[4].num()); put(d, "hrvStatus", r[5].num())
+        }
+
+        // Daily records of a Garmin Connect data export fill what has no samples (steps, stress, Body Battery, ...)
+        val fromDate = java.time.LocalDate.now().minusDays(days.toLong()).toString()
+        db.forEach("SELECT date, data FROM daily_summary WHERE kind = 'garmin_uds' AND date >= ?", listOf(fromDate)) { r ->
+            val d = r[0].str() ?: return@forEach
+            val j = Json.parse(r[1].str()).asMap() ?: return@forEach
+            val a = acc.getOrPut(d) { Acc() }.v
+            fun fill(k: String, x: Double?) { if (x != null && a[k] == null) a[k] = x }
+            fill("steps", j["totalSteps"].asDouble()); fill("kcal", j["activeKilocalories"].asDouble())
+            fill("imMod", j["moderateIntensityMinutes"].asDouble()); fill("imVig", j["vigorousIntensityMinutes"].asDouble())
+            fill("hrMin", j["minHeartRate"].asDouble()); fill("hrMax", j["maxHeartRate"].asDouble())
+            fill("rhr", (j["restingHeartRate"] ?: j["currentDayRestingHeartRate"]).asDouble())
+            val resp = j["respiration"].asMap()
+            if (resp != null) {
+                fill("respAvg", resp["avgWakingRespirationValue"].asDouble()); fill("respMin", resp["lowestRespirationValue"].asDouble())
+                fill("respMax", resp["highestRespirationValue"].asDouble())
+            }
+            val stress = j["allDayStress"].asMap()?.get("aggregatorList").asList()?.mapNotNull { it.asMap() }
+            val total = stress?.firstOrNull { (it["type"] as? String).equals("TOTAL", true) } ?: stress?.firstOrNull()
+            if (total != null) {
+                fill("stressAvg", total["averageStressLevel"].asDouble()?.takeIf { it >= 0 }); fill("stressMax", total["maxStressLevel"].asDouble()?.takeIf { it >= 0 })
+                val rest = total["restDuration"].asDouble() ?: 0.0; val low = total["lowDuration"].asDouble() ?: 0.0
+                val med = total["mediumDuration"].asDouble() ?: 0.0; val high = total["stressDuration"].asDouble() ?: 0.0
+                val sum = rest + low + med + high
+                if (sum > 0 && a["stressN"] == null) {
+                    a["stressN"] = sum / 180 // Garmin measures stress about every 3 min
+                    a["sRest"] = rest / sum; a["sLow"] = low / sum; a["sMed"] = med / sum; a["sHigh"] = high / sum
+                }
+            }
+            val bb = j["bodyBattery"].asMap()
+            if (bb != null) {
+                val stats = bb["bodyBatteryStatList"].asList()?.mapNotNull { it.asMap() } ?: emptyList()
+                fun stat(name: String) = stats.firstOrNull { (it["bodyBatteryStatType"] as? String ?: "").uppercase().contains(name) }?.get("statsValue").asDouble()
+                val all = stats.mapNotNull { it["statsValue"].asDouble() }.filter { it in 0.0..100.0 }
+                fill("bbMax", stat("HIGH") ?: all.maxOrNull()); fill("bbMin", stat("LOW") ?: all.minOrNull())
+                fill("bbUp", bb["chargedValue"].asDouble()); fill("bbDown", bb["drainedValue"].asDouble())
+            }
         }
 
         return acc.map { (d, a) ->

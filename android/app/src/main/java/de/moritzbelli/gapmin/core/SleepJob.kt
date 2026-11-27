@@ -133,4 +133,104 @@ object SleepJob {
         }
         return count
     }
+
+    /** One night of a data export that only has totals (no stage timeline), e.g. Garmin Connect. */
+    class Summary(
+        val night: String, val startTs: Long, val endTs: Long,
+        val deepS: Double, val lightS: Double, val remS: Double, val awakeS: Double, val awakeCount: Int,
+        val stress: Double?, val resp: Double?, val respMin: Double?, val respMax: Double?,
+        val hrv: Double?, val garminScore: Double?,
+    )
+
+    /**
+     * Scores nights from totals with the same model as [recompute]. Without a timeline the onset is taken as the start of
+     * the sleep window, long awakenings are estimated as at most one per 5 min of waking time, and there is no hypnogram.
+     * A night that already exists from another device (real stage data) is left alone. Returns the number of nights written.
+     */
+    fun importSummaries(db: Sql, items: List<Summary>, device: String, zone: ZoneId = ZoneId.systemDefault()): Int {
+        val upsert = db.prepare(
+            """INSERT OR REPLACE INTO sleep_nights (
+              night, device_id, bed_ts, onset_ts, wake_ts, out_ts, tib_min, tst_min, sol_min, waso_min, awakenings, awakenings_long,
+              efficiency, deep_min, light_min, rem_min, awake_min, hr_avg, hr_min, hrv_avg, stress_avg, resp_avg, spo2_avg, bb_gain,
+              midpoint_min, regularity_sd, score, score_duration, score_continuity, score_recovery, score_stages, score_regularity,
+              score_breathing, coverage, garmin_score, details, updated_at
+            ) VALUES (${List(37) { "?" }.joinToString(",")})""",
+        )
+        var count = 0
+        try {
+            db.transaction {
+                for (x in items.sortedBy { it.night }) {
+                    val existing = db.one("SELECT device_id FROM sleep_nights WHERE night = ?", listOf(x.night)).str()
+                    if (existing != null && existing != device) continue
+                    val deepMin = x.deepS / 60; val lightMin = x.lightS / 60; val remMin = x.remS / 60; val awakeMin = x.awakeS / 60
+                    val tst = deepMin + lightMin + remMin
+                    if (tst < 120 || x.endTs <= x.startTs) continue
+                    val tib = maxOf((x.endTs - x.startTs) / 60.0, tst + awakeMin)
+                    val awakeningsLong = if (x.awakeCount > 0) minOf(x.awakeCount, (awakeMin / 5).toInt()) else 0
+                    val m = NightMetrics(
+                        bed = x.startTs, onset = x.startTs, wake = x.endTs, out = x.endTs,
+                        tibMin = tib, tstMin = tst, solMin = 0.0, wasoMin = awakeMin,
+                        awakenings = x.awakeCount, awakeningsLong = awakeningsLong, efficiency = tst / tib,
+                        deepMin = deepMin, lightMin = lightMin, remMin = remMin, awakeMin = awakeMin,
+                        remLatencyMin = null, deepFirstHalfShare = null, remSecondHalfShare = null, segments = emptyList(),
+                    )
+                    val p = NightPhysiology(
+                        hrAvg = null, hrMin = null, hrMinTs = null, hrDayAvg = null, hrDip = null,
+                        hrvAvg = x.hrv, hrvMax = null, stressAvg = x.stress,
+                        respAvg = x.resp, respMin = x.respMin, respMax = x.respMax,
+                        spo2Avg = null, spo2Min = null, spo2Below90 = null, bbGain = null,
+                    )
+                    val prev = db.query(
+                        "SELECT hrv_avg, hr_avg, resp_avg, onset_ts, wake_ts FROM sleep_nights WHERE night < ? ORDER BY night DESC LIMIT $BASELINE_NIGHTS",
+                        listOf(x.night),
+                    )
+                    fun stat(xs: List<Double>): Pair<Double?, Double?> {
+                        if (xs.isEmpty()) return null to null
+                        val mu = xs.average()
+                        return mu to sqrt(xs.sumOf { (it - mu) * (it - mu) } / maxOf(1, xs.size - 1))
+                    }
+                    val lnHrv = prev.mapNotNull { it[0].num() }.filter { it > 0 }.map { ln(it) }
+                    val hrv = stat(lnHrv)
+                    val b = Baselines(
+                        nights = lnHrv.size, lnHrvMean = hrv.first, lnHrvSd = hrv.second,
+                        hrMean = stat(prev.mapNotNull { it[1].num() }).first, respMean = stat(prev.mapNotNull { it[2].num() }).first,
+                    )
+                    val onsets = (listOf(m.onset) + prev.take(6).mapNotNull { it[3].lng() }).map { localClock(it, zone).minutes }
+                    val wakes = (listOf(m.wake) + prev.take(6).mapNotNull { it[4].lng() }).map { localClock(it, zone).minutes }
+                    val so = Sleep.clockSpread(onsets)
+                    val sw = Sleep.clockSpread(wakes)
+                    val spread = if (so != null && sw != null) (so + sw) / 2 else null
+                    var mid = localClock(m.onset + (m.wake - m.onset) / 2, zone).minutes
+                    if (mid > 720) mid -= 1440
+
+                    val r = Sleep.scoreNight(m, p, b, Regularity(onsets.size, spread, mid))
+                    val details = linkedMapOf(
+                        "hypnogram" to emptyList<Any>(),
+                        "physiology" to linkedMapOf(
+                            "hrvAvg" to p.hrvAvg, "stressAvg" to p.stressAvg, "respAvg" to p.respAvg, "respMin" to p.respMin, "respMax" to p.respMax,
+                        ),
+                        "baselines" to linkedMapOf("nights" to b.nights, "lnHrvMean" to b.lnHrvMean, "lnHrvSd" to b.lnHrvSd, "hrMean" to b.hrMean, "respMean" to b.respMean),
+                        "factors" to r.factors,
+                        "label" to r.label,
+                        "provisional" to r.provisional,
+                        "source" to "summary",
+                    )
+                    val c = r.components
+                    upsert.run(
+                        listOf(
+                            x.night, device, m.bed, m.onset, m.wake, m.out, m.tibMin, m.tstMin, m.solMin, m.wasoMin, m.awakenings, m.awakeningsLong,
+                            m.efficiency, m.deepMin, m.lightMin, m.remMin, m.awakeMin, null, null, p.hrvAvg, p.stressAvg, p.respAvg, null,
+                            null, mid, spread, r.score, c[Component.DURATION], c[Component.CONTINUITY], c[Component.RECOVERY],
+                            c[Component.STAGES], c[Component.REGULARITY], c[Component.BREATHING], r.coverage, x.garminScore?.roundToLong(), Json.write(details),
+                            System.currentTimeMillis() / 1000,
+                        ),
+                    )
+                    count++
+                }
+            }
+        } finally {
+            upsert.close()
+        }
+        return count
+    }
 }

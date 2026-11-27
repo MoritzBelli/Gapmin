@@ -398,7 +398,11 @@ private fun HypnoCard(nights: List<SleepNight>, selected: Int) {
     val prev = remember(nights, selected) { nights.drop(selected + 1).take(28) }
     GCard {
         CardHead("Hypnogramm", "${Fmt.time(n.bedTs)} – ${Fmt.time(n.outTs)}")
-        Hypnogram(n, Modifier.fillMaxWidth().height(150.dp))
+        if (n.hypnogram.isEmpty()) {
+            Text("Für diese Nacht liegt nur die Summe der Phasen vor (Garmin-Export), kein Verlauf.", style = T.unit, color = G.text3)
+        } else {
+            Hypnogram(n, Modifier.fillMaxWidth().height(150.dp))
+        }
         Spacer(Modifier.height(G.s4))
         // stage table: minutes, share of TST, own 28-night mean, reference band
         Row(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {

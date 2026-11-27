@@ -270,6 +270,7 @@ class GarminExportImport(private val db: Sql) {
         val metric = db.prepare("INSERT OR REPLACE INTO metric_samples (metric, device_id, ts, value) VALUES (?,?,?,?)")
         val daily = db.prepare("INSERT OR REPLACE INTO daily_summary (date, kind, data) VALUES (?,?,?)")
         val hrv = HashMap<String, MutableMap<String, Any?>>()
+        val sleeps = ArrayList<SleepJob.Summary>()
         try {
             db.transaction {
                 for ((pattern, kind) in DAILY) {
@@ -292,6 +293,21 @@ class GarminExportImport(private val db: Sql) {
                                         val score = d["sleepScores"].asMap()?.get("overallScore").asDouble()
                                         val ts = isoToS(d["sleepEndTimestampGMT"])
                                         if (score != null && score > 0 && score <= 100 && ts != null) metric.run(listOf("garmin_sleep_score", GarminExport.DEVICE, ts, score))
+                                        val a = isoToS(d["sleepStartTimestampGMT"])
+                                        val b = isoToS(d["sleepEndTimestampGMT"])
+                                        if (a != null && b != null) {
+                                            sleeps.add(
+                                                SleepJob.Summary(
+                                                    night = day, startTs = a, endTs = b,
+                                                    deepS = d["deepSleepSeconds"].asDouble() ?: 0.0, lightS = d["lightSleepSeconds"].asDouble() ?: 0.0,
+                                                    remS = d["remSleepSeconds"].asDouble() ?: 0.0, awakeS = d["awakeSleepSeconds"].asDouble() ?: 0.0,
+                                                    awakeCount = d["awakeCount"].asDouble()?.toInt() ?: 0,
+                                                    stress = d["avgSleepStress"].asDouble(), resp = d["averageRespiration"].asDouble(),
+                                                    respMin = d["lowestRespiration"].asDouble(), respMax = d["highestRespiration"].asDouble(),
+                                                    hrv = null, garminScore = score,
+                                                ),
+                                            )
+                                        }
                                     }
                                     "garmin_readiness" -> d["hrvWeeklyAverage"].asDouble()?.let { hrv.getOrPut(day) { HashMap() }["weekly"] = it }
                                     "garmin_health" -> d["metrics"].asList()?.forEach { mm ->
@@ -319,8 +335,17 @@ class GarminExportImport(private val db: Sql) {
             metric.close()
             daily.close()
         }
+        // nights from the sleep totals (needs the HRV of the day, so after the loop above)
+        val nights = SleepJob.importSummaries(
+            db,
+            sleeps.map { x ->
+                val h = (hrv[x.night]?.get("last") as? Double)
+                SleepJob.Summary(x.night, x.startTs, x.endTs, x.deepS, x.lightS, x.remS, x.awakeS, x.awakeCount, x.stress, x.resp, x.respMin, x.respMax, h, x.garminScore)
+            },
+            GarminExport.DEVICE,
+        )
         db.exec("INSERT OR REPLACE INTO meta (key, value) VALUES ('last_import', ?)", listOf((System.currentTimeMillis() / 1000).toString()))
         onProgress(ImportProgress("Fertig", 1f))
-        return ImportResult(acts.size, tracks, samples + acts.size, 0, System.currentTimeMillis() - t0)
+        return ImportResult(acts.size, tracks, samples + acts.size, nights, System.currentTimeMillis() - t0)
     }
 }
