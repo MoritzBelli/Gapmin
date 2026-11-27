@@ -180,10 +180,17 @@ fun TrendsScreen(
         }
         item(key = "trends") { HealthTrends(days, selected) }
         item(key = "hrv") { HrvCard(days, selected) }
-        item(key = "heart") { MetricGroup("Herz-Kreislauf", HEART_DEFS, days, selected, dayDate, dayIndex) }
-        item(key = "stress") { MetricGroup("Stress & Body Battery", STRESS_DEFS, days, selected, dayDate, dayIndex) }
-        item(key = "activity") { MetricGroup("Aktivität", activity, days, selected, dayDate, dayIndex) }
-        item(key = "breath") { MetricGroup("Atmung & Sauerstoff", BREATH_DEFS, days, selected, dayDate, dayIndex) }
+        item(key = "metrics") {
+            BaselineOverview(
+                "Kennzahlen", listOf(
+                    MetricSection("Herz-Kreislauf", HEART_DEFS),
+                    MetricSection("Stress & Body Battery", STRESS_DEFS),
+                    MetricSection("Aktivität", activity),
+                    MetricSection("Atmung & Sauerstoff", BREATH_DEFS),
+                ),
+                days, selected, dayDate, dayIndex, trailing = "vs. 28 Tage",
+            )
+        }
     }
 }
 

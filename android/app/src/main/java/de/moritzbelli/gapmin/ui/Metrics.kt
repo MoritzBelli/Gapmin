@@ -50,6 +50,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.moritzbelli.gapmin.core.Fmt
@@ -200,6 +201,152 @@ fun <T> MetricRow(def: MetricDef<T>, items: List<T>, selected: Int, dateOf: (T) 
         if (info.isNotEmpty()) InfoPanel(infoOpen, info, Modifier.padding(horizontal = G.s1).padding(bottom = G.s2))
         AnimatedVisibility(open, enter = expandVertically(tween(G.T_SLOW, easing = G.easeOut)) + fadeIn(), exit = shrinkVertically() + fadeOut()) {
             TrendBlock(def, items, selected, base, dateOf, dayOf)
+        }
+    }
+}
+
+class MetricSection<T>(val title: String, val defs: List<MetricDef<T>>)
+
+private class OvRow<T>(val def: MetricDef<T>, val v: Double?, val base: Baseline?, val z: Double?, val head: String?)
+
+private fun <T> deltaText(def: MetricDef<T>, v: Double?, base: Baseline?, z: Double?): String = when {
+    v == null -> "keine Messung"
+    base == null -> "Baseline ab 5 Werten"
+    z == null -> "–"
+    def.log -> "${Fmt.signed((v / base.center - 1) * 100)} % · z ${Fmt.signed(z, 1)}"
+    else -> "${def.fmtDelta(v - base.center)} · z ${Fmt.signed(z, 1)}"
+}
+
+private fun <T> infoText(def: MetricDef<T>, base: Baseline?): String = listOfNotNull(
+    def.note,
+    def.ref?.let { "Referenz: $it" },
+    base?.let {
+        val spread = if (def.log) "${Fmt.num((exp(it.sd) - 1) * 100)} %" else def.fmtSpread(it.sd)
+        "Baseline ${if (def.log) "(geom.) " else ""}${def.fmt(it.center)} ± $spread aus ${it.n} Werten (28 vorherige Tage bzw. Nächte)."
+    },
+).joinToString("\n\n")
+
+/**
+ * All single-value metrics in one diagram: one row per metric, bar = deviation of the selected day from the own 28-day
+ * baseline in SD units (grey band ±1 SD, green better / red worse / grey neutral). Tap a row for value, baseline,
+ * references and the 90-day course; tap again to close.
+ */
+@Composable
+fun <T> BaselineOverview(
+    title: String,
+    sections: List<MetricSection<T>>,
+    items: List<T>,
+    selected: Int,
+    dateOf: (T) -> String,
+    dayOf: (T) -> Long,
+    trailing: String? = null,
+) {
+    val item = items.getOrNull(selected) ?: return
+    val rows = remember(sections, items, selected) {
+        sections.flatMap { sec ->
+            sec.defs.mapIndexed { i, d ->
+                val v = d.get(item)?.takeIf { it.isFinite() }
+                val b = d.baseline(items, selected)
+                OvRow(d, v, b, if (v != null && b != null) b.z(v) else null, if (i == 0) sec.title else null)
+            }
+        }
+    }
+    var sel by remember(sections) { mutableStateOf<Int?>(null) }
+    val reveal = remember(items, selected) { Animatable(0f) }
+    LaunchedEffect(items, selected) { reveal.animateTo(1f, tween(G.T_DRAW, easing = G.easeOut)) }
+    val measurer = rememberTextMeasurer()
+    val rowH = 26.dp
+    val headH = 24.dp
+    val total = rowH * rows.size + headH * rows.count { it.head != null }
+    val info = "Jede Zeile ist eine Kennzahl der gewählten Nacht bzw. des gewählten Tages. Der Balken zeigt die Abweichung vom eigenen Mittel " +
+        "der 28 vorherigen Werte in Standardabweichungen; das graue Band ist ±1 SD, die Marken sind ±2 SD. " +
+        "Grün: besser, rot: schlechter als gewöhnlich (ab 0,5 SD); grau: neutral oder keine Richtung. Zeile antippen für Details."
+
+    GCard(padding = G.s4) {
+        Box(Modifier.padding(horizontal = G.s1)) { CardHead(title, trailing, info = info) }
+        Canvas(
+            Modifier
+                .fillMaxWidth()
+                .height(total)
+                .pointerInput(rows) {
+                    detectTapGestures { o ->
+                        var y = 0f
+                        var hit: Int? = null
+                        for ((i, r) in rows.withIndex()) {
+                            if (r.head != null) y += headH.toPx()
+                            if (o.y >= y && o.y < y + rowH.toPx()) { hit = i; break }
+                            y += rowH.toPx()
+                        }
+                        val h = hit
+                        sel = if (h == null || sel == h) null else h
+                    }
+                },
+        ) {
+            val labelW = size.width * 0.37f
+            val valW = 64.dp.toPx()
+            val gap = 8.dp.toPx()
+            val bx0 = labelW + gap
+            val bx1 = size.width - valW - gap
+            fun x(z: Double) = bx0 + ((z.coerceIn(-3.0, 3.0) + 3.0) / 6.0 * (bx1 - bx0)).toFloat()
+            val headStyle = TextStyle(fontFamily = Inter, fontSize = 9.5.sp, color = G.text3, letterSpacing = 0.8.sp)
+            // band ±1 SD and zero line through the whole diagram
+            drawRoundRect(G.surface3.copy(alpha = 0.55f), Offset(x(-1.0), 0f), Size(x(1.0) - x(-1.0), size.height), CornerRadius(4.dp.toPx()))
+            for (t in listOf(-2.0, 2.0)) drawLine(G.hairline, Offset(x(t), 0f), Offset(x(t), size.height), 1.dp.toPx())
+            drawLine(G.hairlineStrong, Offset(x(0.0), 0f), Offset(x(0.0), size.height), 1.dp.toPx())
+
+            var y = 0f
+            for ((i, r) in rows.withIndex()) {
+                r.head?.let { h ->
+                    val t = measurer.measure(h.uppercase(), headStyle, maxLines = 1, softWrap = false)
+                    drawText(t, topLeft = Offset(0f, y + headH.toPx() - t.size.height - 4.dp.toPx()))
+                    y += headH.toPx()
+                }
+                val cy = y + rowH.toPx() / 2
+                val on = sel == i
+                if (on) drawRoundRect(G.hairlineStrong.copy(alpha = 0.35f), Offset(0f, y + 1.dp.toPx()), Size(size.width, rowH.toPx() - 2.dp.toPx()), CornerRadius(6.dp.toPx()))
+                val tone = zTone(r.z, r.def.better)
+                val ls = TextStyle(fontFamily = Inter, fontSize = 11.sp, color = if (on) G.text1 else G.text2)
+                val lt = measurer.measure(r.def.label, ls, overflow = TextOverflow.Ellipsis, softWrap = false, maxLines = 1, constraints = Constraints(maxWidth = (labelW - 4.dp.toPx()).toInt().coerceAtLeast(1)))
+                drawText(lt, topLeft = Offset(4.dp.toPx(), cy - lt.size.height / 2f))
+                if (r.z != null) {
+                    val zEnd = x(r.z * reveal.value)
+                    val x0 = x(0.0)
+                    val bh = 7.dp.toPx()
+                    drawRoundRect(tone.copy(alpha = 0.85f), Offset(minOf(x0, zEnd), cy - bh / 2), Size(maxOf(abs(zEnd - x0), 2.dp.toPx()), bh), CornerRadius(3.dp.toPx()))
+                    drawCircle(tone, 3.dp.toPx(), Offset(zEnd, cy))
+                } else {
+                    drawCircle(G.text3.copy(alpha = 0.5f), 1.5.dp.toPx(), Offset(x(0.0), cy))
+                }
+                val vs = TextStyle(fontFamily = Inter, fontSize = 11.sp, color = if (r.v == null) G.text3 else G.text1)
+                val vt = measurer.measure(
+                    if (r.v == null) "–" else (r.def.fmt(r.v) + if (r.def.unitLabel.isNotEmpty()) " ${r.def.unitLabel}" else ""),
+                    vs, overflow = TextOverflow.Ellipsis, softWrap = false, maxLines = 1, constraints = Constraints(maxWidth = valW.toInt()),
+                )
+                drawText(vt, topLeft = Offset(size.width - vt.size.width - 2.dp.toPx(), cy - vt.size.height / 2f))
+                y += rowH.toPx()
+            }
+        }
+        val r = sel?.let { rows.getOrNull(it) }
+        AnimatedVisibility(r != null, enter = expandVertically(tween(G.T_SLOW, easing = G.easeOut)) + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+            if (r != null) {
+                val tone = zTone(r.z, r.def.better)
+                val txt = infoText(r.def, r.base)
+                Column(Modifier.fillMaxWidth().padding(horizontal = G.s1)) {
+                    Spacer(Modifier.height(G.s3))
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(G.hairline))
+                    Spacer(Modifier.height(G.s3))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Dot(r.def.color, 5.dp)
+                        Spacer(Modifier.width(G.s2))
+                        Text(r.def.label, style = T.sm, color = G.text1, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        ValueUnit(r.def.fmt(r.v), r.def.unitLabel, T.xl.copy(fontSize = 20.sp))
+                    }
+                    Text(deltaText(r.def, r.v, r.base, r.z), style = T.unit, color = tone, modifier = Modifier.padding(top = 4.dp))
+                    if (txt.isNotEmpty()) Text(txt, style = T.unit, color = G.text3, modifier = Modifier.padding(top = G.s2))
+                    Spacer(Modifier.height(G.s3))
+                    TrendBlock(r.def, items, selected, r.base, dateOf, dayOf)
+                }
+            }
         }
     }
 }

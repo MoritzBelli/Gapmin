@@ -323,16 +323,18 @@ fun SleepScreen(
         item(key = "hypno") { HypnoCard(nights, selected) }
         item(key = "trends") { SleepTrends(nights, selected) }
         item(key = "derivation") { DerivationCard(n) }
-        item(key = "timing") { MetricGroup("Dauer & Timing", TIMING_DEFS, nights, selected, nightDate, nightDay) }
-        item(key = "continuity") { MetricGroup("Kontinuität", CONTINUITY_DEFS, nights, selected, nightDate, nightDay) }
-        item(key = "arch") { MetricGroup("Architektur", ARCH_DEFS, nights, selected, nightDate, nightDay, trailing = "Phasen") }
-        item(key = "autonomic") {
-            MetricGroup(
-                "Autonome Physiologie", AUTONOMIC_DEFS, nights, selected, nightDate, nightDay,
-                footnote = "Die Grundlage der Komponente „Autonome Erholung“.",
+        item(key = "metrics") {
+            BaselineOverview(
+                "Kennzahlen", listOf(
+                    MetricSection("Dauer & Timing", TIMING_DEFS),
+                    MetricSection("Kontinuität", CONTINUITY_DEFS),
+                    MetricSection("Architektur", ARCH_DEFS),
+                    MetricSection("Autonome Physiologie", AUTONOMIC_DEFS),
+                    MetricSection("Atmung & Sauerstoff", BREATHING_DEFS),
+                ),
+                nights, selected, nightDate, nightDay, trailing = "vs. 28 Nächte",
             )
         }
-        item(key = "breathing") { MetricGroup("Atmung & Sauerstoff", BREATHING_DEFS, nights, selected, nightDate, nightDay) }
     }
 }
 
