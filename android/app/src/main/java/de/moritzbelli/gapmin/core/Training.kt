@@ -258,7 +258,8 @@ object Training {
         fun tid(daysBack: Int): Tid {
             val z5 = DoubleArray(5)
             val z3 = DoubleArray(3)
-            for (a in acts) if (a.epochDay > last - daysBack) {
+            // walks count towards load, but are not endurance training sessions for the intensity distribution
+            for (a in acts) if (a.epochDay > last - daysBack && a.sport != "walking") {
                 val z = zones(a, hr)
                 for (k in 0 until 5) z5[k] += z.z5[k]
                 for (k in 0 until 3) z3[k] += z.z3[k]
