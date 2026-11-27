@@ -14,6 +14,46 @@ object Json {
         }
     }
 
+    /**
+     * Streams the objects/arrays that sit at nesting depth [depth] (the root container is entered at depth 0) out of a
+     * large JSON document, parsing one at a time so big exports never have to fit in memory.
+     * Example: `[ {..}, {..} ]` -> depth 1; `[ { "list": [ {..}, {..} ] } ]` -> depth 3.
+     */
+    fun forEachAt(r: java.io.Reader, depth: Int, f: (Any?) -> Unit) {
+        val buf = CharArray(1 shl 16)
+        val sb = StringBuilder()
+        var d = 0
+        var inStr = false
+        var esc = false
+        var cap = false
+        while (true) {
+            val n = r.read(buf)
+            if (n < 0) break
+            for (k in 0 until n) {
+                val c = buf[k]
+                if (inStr) {
+                    if (cap) sb.append(c)
+                    if (esc) esc = false else if (c == '\\') esc = true else if (c == '"') inStr = false
+                    continue
+                }
+                when (c) {
+                    '"' -> { inStr = true; if (cap) sb.append(c) }
+                    '{', '[' -> {
+                        if (d == depth) { cap = true; sb.setLength(0) }
+                        d++
+                        if (cap) sb.append(c)
+                    }
+                    '}', ']' -> {
+                        d--
+                        if (cap) sb.append(c)
+                        if (cap && d == depth) { cap = false; f(parse(sb.toString())) }
+                    }
+                    else -> if (cap) sb.append(c)
+                }
+            }
+        }
+    }
+
     fun write(v: Any?): String = StringBuilder().also { write(v, it) }.toString()
 
     private fun write(v: Any?, sb: StringBuilder) {

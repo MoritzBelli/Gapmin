@@ -41,6 +41,8 @@ class GadgetbridgeImport(
                 val z = ZipFile(export)
                 zip = z
                 val files = z.entries().toList().filter { !it.isDirectory }
+                // Data export from Garmin Connect (not a Gadgetbridge backup)
+                if (GarminExport.isExport(files.map { it.name })) return GarminExportImport(db).run(z, onProgress, t0)
                 // Database: prefer the canonical name, otherwise sniff the SQLite header
                 val candidates = files.filter { DB_NAME.containsMatchIn(it.name) }
                     .sortedByDescending { Regex("gadgetbridge$", RegexOption.IGNORE_CASE).containsMatchIn(it.name) }
