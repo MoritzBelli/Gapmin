@@ -154,7 +154,7 @@ private fun PmcChart(days: List<LoadDay>) {
     val c = cursor ?: (n - 1)
     val sel = days[c]
     Text(
-        "${epochText(sel.epochDay)} · Last ${Fmt.num(sel.load)} · Fit ${Fmt.num(sel.ctl)} · Erm ${Fmt.num(sel.atl)} · Form ${Fmt.signed(sel.tsb)}",
+        "${epochText(sel.epochDay)} · Last ${Fmt.num(sel.load)} · CTL ${Fmt.num(sel.ctl)} · ATL ${Fmt.num(sel.atl)} · TSB ${Fmt.signed(sel.tsb)}",
         style = T.stat, color = if (cursor != null) G.text1 else G.text3, maxLines = 1, overflow = TextOverflow.Ellipsis,
         modifier = Modifier.padding(bottom = G.s2),
     )
@@ -276,8 +276,8 @@ private fun LoadCard(t: TrainingSummary, garmin: GarminDaily, modifier: Modifier
         Spacer(Modifier.height(G.s4))
         StatTable(
             listOf(
-                "Akut 7 T" to Fmt.num(d.acute, 1),
-                "Chron. 28 T" to Fmt.num(d.chronic, 1),
+                "Akut" to Fmt.num(d.acute, 1),
+                "Chronisch" to Fmt.num(d.chronic, 1),
                 "Monotonie" to (t.monotony?.let { Fmt.num(it, 2) } ?: "–"),
                 "Strain" to (t.strain?.let { Fmt.num(it) } ?: "–"),
             ),

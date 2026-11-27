@@ -10,6 +10,8 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -229,18 +231,18 @@ private fun Signals(
             InfoButton(info, { info = !info })
         }
         InfoPanel(info, SIGNAL_INFO, Modifier.padding(bottom = G.s2))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(G.s2)) {
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(G.s2)) {
             SignalCard(
                 "HRV 7 T",
                 hrv?.roll7?.let { Fmt.num(exp(it)) } ?: "–", "ms",
-                HrvGuide.statusLabel(hrv?.status),
+                when (hrv?.status) { -1 -> "unter Normal"; 0 -> "normal"; 1 -> "über Normal"; else -> "im Aufbau" },
                 when (hrv?.status) { -1 -> G.bad; 1 -> G.caution; 0 -> G.good; else -> G.text3 },
                 Modifier.weight(1f), onHrv,
             )
             SignalCard(
                 "Belastung",
                 acwr?.let { Fmt.num(it, 2) } ?: "–", "ACWR",
-                if (acwr == null) (if (load != null) "Verlauf im Aufbau" else "keine Aktivitäten") else Training.acwrLabel(acwr),
+                if (acwr == null) (if (load != null) "im Aufbau" else "keine Daten") else Training.acwrLabel(acwr),
                 when {
                     acwr == null -> G.text3
                     acwr > 1.5 -> G.bad
@@ -265,6 +267,7 @@ private fun Signals(
 private fun SignalCard(label: String, value: String, unit: String, status: String, tone: Color, modifier: Modifier, onClick: () -> Unit) {
     Column(
         modifier
+            .fillMaxHeight()
             .clip(RoundedCornerShape(20.dp))
             .background(G.panel)
             .pressable(onClick, haptic = true)

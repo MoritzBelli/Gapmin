@@ -98,10 +98,12 @@ class ScreenshotTest {
     }
     @Test fun todayLower() = render("9-heute-kennzahlen") {
         val list = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = 3)
-        TodayScreen(
-            state.days, state.nights, state.runs, state.insights, 0, {}, { d, cb -> cb(Health.daySeries(db, d)) }, list, 120.dp,
-            {}, {}, {}, {}, {},
-        )
+        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().background(G.bg)) {
+            TodayScreen(
+                state.days, state.nights, state.runs, state.insights, 0, {}, { d, cb -> cb(Health.daySeries(db, d)) }, list, 120.dp,
+                {}, {}, {}, {}, {},
+            )
+        }
     }
     @Test fun runDetailLower() = render("10-lauf-analyse") {
         androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().background(G.bg).padding(16.dp)) {

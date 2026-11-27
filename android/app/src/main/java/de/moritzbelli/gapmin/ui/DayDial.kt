@@ -200,7 +200,7 @@ fun DayDial(date: String, series: DaySeries?, nights: List<SleepNight>, isToday:
             }
 
             // ring tracks
-            val tracks = listOf(0.92f to 0.16f, 0.765f to 0.085f, 0.635f to 0.13f, 0.50f to 0.06f)
+            val tracks = listOf(0.93f to 0.14f, 0.795f to 0.07f, 0.645f to 0.19f, 0.505f to 0.05f)
             for ((rf, wf) in tracks) drawCircle(G.surface2, R * rf, c, style = Stroke(R * wf))
 
             // hour ticks and labels
@@ -217,8 +217,8 @@ fun DayDial(date: String, series: DaySeries?, nights: List<SleepNight>, isToday:
 
             // heart rate: radial bars
             hr?.let { bins ->
-                val r0 = R * 0.845f
-                val band = R * 0.155f
+                val r0 = R * 0.865f
+                val band = R * 0.135f
                 val w = (2 * PI * R / 144 * 0.48).toFloat()
                 for (i in bins.indices) {
                     val v = bins[i] ?: continue
@@ -231,8 +231,8 @@ fun DayDial(date: String, series: DaySeries?, nights: List<SleepNight>, isToday:
 
             // stress: arc per bin in the Garmin category colour
             stress?.let { bins ->
-                val r = R * 0.765f
-                val sw = R * 0.085f
+                val r = R * 0.795f
+                val sw = R * 0.07f
                 for (i in bins.indices) {
                     val v = bins[i] ?: continue
                     val m = i * 10f
@@ -246,27 +246,52 @@ fun DayDial(date: String, series: DaySeries?, nights: List<SleepNight>, isToday:
 
             // Body Battery: polar line inside its band, with a soft fill towards the band's base
             if (bb.size >= 2) {
-                val r0 = R * 0.57f
-                val band = R * 0.13f
+                val r0 = R * 0.555f
+                val band = R * 0.18f
                 val line = Path()
                 var started = false
                 var prev: Long? = null
+                // one closed polar area per continuous stretch: out along the values, back along the base circle
+                val area = Path()
+                val stretch = ArrayList<Float>()
+                fun closeArea() {
+                    if (stretch.size >= 2) {
+                        val a = stretch.first()
+                        val b = stretch.last()
+                        val p = pt(b, r0)
+                        area.lineTo(p.x, p.y)
+                        val steps = ((b - a) / 10f).toInt().coerceAtLeast(1)
+                        for (k in steps downTo 0) { val q = pt(a + (b - a) * k / steps, r0); area.lineTo(q.x, q.y) }
+                        area.close()
+                    }
+                    stretch.clear()
+                }
                 for (s in bb) {
                     val m = (s.ts - start) / 60f
                     if (m < 0 || m > 1440f || m > limit) continue
                     val p = pt(m, r0 + band * (s.value / 100f).toFloat())
-                    if (!started || (prev != null && s.ts - prev > 3600)) line.moveTo(p.x, p.y) else line.lineTo(p.x, p.y)
+                    if (!started || (prev != null && s.ts - prev > 3600)) {
+                        closeArea()
+                        line.moveTo(p.x, p.y)
+                        area.moveTo(p.x, p.y)
+                    } else {
+                        line.lineTo(p.x, p.y)
+                        area.lineTo(p.x, p.y)
+                    }
+                    stretch.add(m)
                     started = true
                     prev = s.ts
                 }
+                closeArea()
+                drawPath(area, G.battery.copy(alpha = 0.10f))
                 drawPath(line, G.battery.copy(alpha = 0.18f), style = Stroke(6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
                 drawPath(line, G.battery, style = Stroke(1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
 
             // sleep stages
             run {
-                val r = R * 0.50f
-                val sw = R * 0.06f
+                val r = R * 0.505f
+                val sw = R * 0.05f
                 for (s in sleep) {
                     if (s.from > limit) continue
                     val to = minOf(s.to, limit)

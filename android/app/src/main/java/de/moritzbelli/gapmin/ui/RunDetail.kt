@@ -367,7 +367,7 @@ internal fun RunAnalysisCard(run: RunSummary, hr: HrAnchors?) {
             Spacer(Modifier.height(G.s2))
             ShareBar(z.indices.map { z[it] to zc[it] }, height = 8.dp)
             Spacer(Modifier.height(G.s2))
-            ShareLegend(z.indices.map { Triple("Z${it + 1}", Fmt.hm(z[it] / 60), zc[it]) })
+            ShareLegend(z.indices.map { Triple("Z${it + 1}", if (z[it] < 3600) "${Fmt.num(z[it] / 60)} min" else "${Fmt.hm(z[it] / 60)} h", zc[it]) })
         }
         if (m != null && m.splits.size >= 2) {
             Spacer(Modifier.height(G.s4))

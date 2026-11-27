@@ -48,6 +48,16 @@ Stand: 26.11.2026. Ziel: ein nächtlicher Gesamtscore 0–100 (ähnlich Garmin),
 
 → Atmung und SpO2 sind vor allem **Warnsignale** und tragen wenig zur Qualität bei. Geringes Gewicht, deutlicher Hinweis bei Abweichung.
 
+### 1.9 Rhythmus über mehrere Nächte (ergänzt 27.11.2026)
+Diese Maße fließen **nicht** in den GSS ein, sie stehen in der Karte „Rhythmus“ (`core/Rhythm.kt`).
+- **Sleep Regularity Index (SRI, Phillips et al. 2017):** Wahrscheinlichkeit, zu zwei Zeitpunkten im Abstand von 24 h im selben Zustand (Schlaf oder wach) zu sein, skaliert auf −100 bis 100. Gapmin rechnet über 7 Tage (Mittag bis Mittag) in 5-Minuten-Epochen, Schlaf = Leicht-, Tief- und REM-Phasen des Hypnogramms (ohne Verlauf: Einschlafen bis Aufwachen). Tage ohne Aufzeichnung fallen heraus, mindestens 4 Tagespaare. Nickerchen erfasst die Uhr nicht, sie zählen als wach.
+- **Windred et al. 2024** (UK Biobank, n ≈ 61 000, Beschleunigungsmessung): Median-SRI 81,0 (IQR 73,8–86,3). Regelmäßigerer Schlaf ging mit 20–48 % niedrigerer Gesamtsterblichkeit einher und sagte sie besser vorher als die Schlafdauer. Gapmin ordnet den eigenen SRI in diese Verteilung ein (unteres Quartil, mittlere Hälfte, oberes Quartil). Die Kohorte war im Mittel 63 Jahre alt.
+- **Social Jetlag (Wittmann et al. 2006):** |Schlafmitte freier Tage − Schlafmitte der Arbeitstage|, nach MCTQ-Logik: Nächte vor freien Tagen enden am Samstag oder Sonntag. Gapmin nutzt die letzten 28 Nächte (mind. 2 freie, 3 Arbeitsnächte). Mehr als 1 h war mit höherem BMI assoziiert (Roenneberg et al. 2012).
+- **Chronotyp MSFsc (Roenneberg et al. 2004):** Schlafmitte freier Tage, um den Nachholschlaf korrigiert: MSFsc = MSF − (SDf − SDweek)/2, wenn freie Nächte länger sind (SDweek = (5·SDw + 2·SDf)/7).
+- **Schlafbilanz:** Σ (TST − 7 h) der letzten 7 Nächte, mit 7 h als AASM-Mindestempfehlung (Watson et al. 2015). Chronische Verkürzung summiert sich in der Leistungsfähigkeit (Van Dongen et al. 2003).
+- **Streuung der Schlafdauer:** SD der TST über 7 Nächte. Höhere Nacht-zu-Nacht-Variabilität ist mit schlechterer psychischer und körperlicher Gesundheit assoziiert (Bei et al. 2016, Review).
+- Darstellung: SRI mit Bereichsskala (IQR der UK Biobank als Band), Kennzahlen, Schlaffenster der letzten 21 Nächte (18–12 Uhr, freie Nächte farbig) und der SRI je Nacht im Langzeittrend und in den Kennzahlen.
+
 ### 1.8 Ergänzend: Matthew Walker, „Das große Buch vom Schlaf“ (2017/2018)
 Das Buch dient nur als **Zusatzinformation** für Erklärtexte, nicht als Grundlage der Gewichtung:
 - Walker ordnet guten Schlaf in **Menge, Qualität, Regelmäßigkeit und Timing** ein. Das deckt sich mit Ru-SATED und den Komponenten oben.
@@ -155,5 +165,11 @@ Zu Bett, Einschlafen, Aufwachen, Aufstehen, Zeit im Bett, Gesamtschlafzeit, Late
 - Natarajan A et al. Measurement of respiratory rate using wearable devices and applications to COVID-19 detection. *npj Digit Med* 2021. doi:10.1038/s41746-021-00493-6
 - Nächtliche SpO2-Referenzwerte aus Wearables: *npj Digit Med* 2023. doi:10.1038/s41746-023-00851-6
 - Herzfrequenz-Dipping: Hilmisson et al., *Front Sleep* 2024. doi:10.3389/frsle.2024.1230958; *J Hypertens* 2025;43(5):790–796
+- Phillips AJK et al. Irregular sleep/wake patterns are associated with poorer academic performance and delayed circadian and sleep/wake timing. *Sci Rep* 2017;7:3216. doi:10.1038/s41598-017-03171-4
+- Wittmann M, Dinich J, Merrow M, Roenneberg T. Social jetlag: misalignment of biological and social time. *Chronobiol Int* 2006;23(1–2):497–509
+- Roenneberg T et al. A marker for the end of adolescence. *Curr Biol* 2004;14(24):R1038–R1039 (MSFsc)
+- Roenneberg T, Allebrandt KV, Merrow M, Vetter C. Social jetlag and obesity. *Curr Biol* 2012;22(10):939–943
+- Van Dongen HPA et al. The cumulative cost of additional wakefulness. *Sleep* 2003;26(2):117–126
+- Bei B, Wiley JF, Trinder J, Manber R. Beyond the mean: a systematic review on the correlates of daily intraindividual variability of sleep/wake patterns. *Sleep Med Rev* 2016;28:108–124
 - Ergänzend: Walker M. *Why We Sleep / Das große Buch vom Schlaf.* Scribner 2017 / Goldmann 2018. Kritik: Guzey A. „Matthew Walker's 'Why We Sleep' Is Riddled with Scientific and Factual Errors“, guzey.com, 2019
 - Garmin: „How Garmin watches track your sleep, calculate sleep score“ (garmin.com Blog); the5krunner, Garmin Sleep Score

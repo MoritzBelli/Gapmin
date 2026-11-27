@@ -158,8 +158,8 @@ fun StatTable(cells: List<Pair<String, String>>, columns: Int = 4, modifier: Mod
         for ((ri, row) in cells.chunked(columns).withIndex()) {
             Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                 for ((ci, c) in row.withIndex()) {
-                    Column(Modifier.weight(1f)) {
-                        Text(c.first, style = T.label, maxLines = 1)
+                    Column(Modifier.weight(1f).padding(end = 6.dp)) {
+                        Text(c.first, style = T.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(c.second, style = T.stat, color = tone(ri * columns + ci), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }

@@ -141,10 +141,18 @@ private fun activityDefs(week: Map<Long, Double>) = listOf(
 )
 
 @Composable
-internal fun HealthTrends(days: List<HealthDay>, selected: Int) {
-    val defs = remember(days) {
+internal fun HealthTrends(days: List<HealthDay>, selected: Int, insights: Insights? = null) {
+    val defs = remember(days, insights) {
         val a = activityDefs(weekIntensity(days))
-        listOf(HEART_DEFS[0], HEART_DEFS[1], HEART_DEFS[4], STRESS_DEFS[0], STRESS_DEFS[2], STRESS_DEFS[4], a[0], a[2], BREATH_DEFS[2])
+        val base = listOf(HEART_DEFS[0], HEART_DEFS[1], HEART_DEFS[4], STRESS_DEFS[0], STRESS_DEFS[2], STRESS_DEFS[4], a[0], a[2], BREATH_DEFS[2])
+        val t = insights?.training ?: return@remember base
+        // training-derived series on the same day axis (see docs/research/training.md)
+        val vo2 = t.vo2.associate { it.epochDay to it.value }
+        base + listOf(
+            MetricDef<HealthDay>("Fitness (CTL)", { d -> t.day(d.epochDay)?.ctl }, better = 1, color = G.fitness, note = "Banister-Fitness, EWMA 42 Tage der TRIMP-Last."),
+            MetricDef<HealthDay>("ACWR", { d -> t.day(d.epochDay)?.acwr }, digits = 2, color = G.fatigue, refLo = 0.8, refHi = 1.3, ref = "0,8–1,3 (Gabbett 2016)"),
+            MetricDef<HealthDay>("VO2max (Schätzung)", { d -> vo2[d.epochDay] }, unit = "ml/kg/min", digits = 1, better = 1, color = G.oxygen),
+        )
     }
     TrendsCard("Langzeittrends", defs, days, selected, dayIndex, dayDate)
 }
@@ -183,7 +191,7 @@ fun TrendsScreen(
             return@LazyColumn
         }
         item(key = "hrv") { Box(Modifier.reveal(reveal, "hrv", 0)) { HrvGuideCard(days, insights.hrv) } }
-        item(key = "trends") { Box(Modifier.reveal(reveal, "trends", 1)) { HealthTrends(days, selected) } }
+        item(key = "trends") { Box(Modifier.reveal(reveal, "trends", 1)) { HealthTrends(days, selected, insights) } }
         item(key = "metrics") {
             BaselineOverview(
                 "Kennzahlen", listOf(
@@ -256,7 +264,7 @@ private fun HrvGuideCard(days: List<HealthDay>, guide: List<HrvGuideDay>) {
         StatTable(
             listOf(
                 "Nacht" to (ms(g.ln)?.let { "${Fmt.num(it)} ms" } ?: "–"),
-                "Normalbereich" to (if (g.swcLo != null && g.swcHi != null) "${Fmt.num(exp(g.swcLo!!))}–${Fmt.num(exp(g.swcHi!!))}" else "–"),
+                "Bereich" to (if (g.swcLo != null && g.swcHi != null) "${Fmt.num(exp(g.swcLo!!))}–${Fmt.num(exp(g.swcHi!!))}" else "–"),
                 "CV 7 T" to (g.cv7?.let { "${Fmt.num(it, 1)} %" } ?: "–"),
                 "Garmin" to hrvStatus(d?.hrvStatus),
             ),

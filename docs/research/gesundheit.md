@@ -31,6 +31,19 @@ Kein Medizinprodukt, keine Diagnosen.
 
 HRV-Status (Gadgetbridge `statusnum`): 1 schlecht, 2 niedrig, 3 unausgeglichen, 4 ausgeglichen.
 
+## 2a. HRV-Steuerung (ergänzt 27.11.2026)
+
+Karte **HRV-Steuerung** in Trends und Signal „HRV“ auf Heute (`core/Rhythm.kt`, `HrvGuide`):
+- **7-Tage-Mittel von ln RMSSD** (mind. 4 von 7 Nächten) statt Einzelnächten (Plews et al. 2012/2013; AIS-Leitfaden zur HRV-Überwachung).
+- **Kleinster relevanter Unterschied (SWC):** Baseline-Mittel ± 0,5 SD der ln-RMSSD-Werte der 60 Tage vor dem 7-Tage-Fenster (mind. 14 Nächte). Liegt das 7-Tage-Mittel darunter, gilt die Erholung als unvollständig. In Studien zum HRV-gesteuerten Training wurde dann locker statt intensiv trainiert, mit gleichen oder größeren Leistungszuwächsen (Kiviniemi et al. 2007; Vesterinen et al. 2016; Javaloyes et al. 2019).
+- **Variationskoeffizient (CV) von ln RMSSD über 7 Tage:** Bei einer Triathletin auf dem Weg ins nicht-funktionelle Overreaching sanken Mittel und CV (Plews et al. 2012). Gapmin zeigt den CV als Zusatzwert ohne eigene Schwelle.
+- Status: unter / im / über dem Normalbereich. Über dem Bereich ist nicht automatisch gut (parasympathische Sättigung bei sehr hoher Belastung möglich) und wird neutral-orange markiert.
+- Garmins HRV-Status steht daneben; sein Normalbereich ist proprietär.
+
+**Heute-Signale:** HRV (s. o.), Belastung (ACWR, siehe `training.md`) und Schlaf (GSS) werden bewusst **nicht** zu einem Bereitschafts-Score verrechnet, weil es für eine solche Gewichtung keine belastbare Evidenz gibt.
+
+**Heute-Chronogramm:** 24-Stunden-Kreis mit Puls (10-Minuten-Mittel), Stress (Garmin-Kategorien), Body Battery und Schlafphasen. Chronobiologische Darstellung, keine zusätzliche Berechnung.
+
 ## 3. Grenzen
 
 - Stress, Body Battery und HRV-Status sind Firstbeat-Algorithmen. Gut für Verläufe einer Person, nicht für Vergleiche zwischen Personen.
@@ -38,6 +51,11 @@ HRV-Status (Gadgetbridge `statusnum`): 1 schlecht, 2 niedrig, 3 unausgeglichen, 
 - Bevölkerungsreferenzen sind Orientierung. Aussagekräftig ist vor allem die Abweichung von der eigenen Baseline.
 
 ## 4. Quellen
+
+- Kiviniemi AM, Hautala AJ, Kinnunen H, Tulppo MP. Endurance training guided individually by daily heart rate variability measurements. *Eur J Appl Physiol* 2007;101(6):743–751
+- Vesterinen V et al. Individual endurance training prescription with heart rate variability. *Med Sci Sports Exerc* 2016;48(7):1347–1354
+- Javaloyes A, Sarabia JM, Lamberts RP, Moya-Ramon M. Training prescription guided by heart-rate variability in cycling. *Int J Sports Physiol Perform* 2019;14(1):23–32
+- Australian Institute of Sport: Heart Rate Variability – Best Practice Guidelines (ais.gov.au)
 
 - Cohen J. *Statistical Power Analysis for the Behavioral Sciences*, 2. Aufl. Erlbaum 1988
 - Plews DJ et al. Heart rate variability in elite triathletes … *Eur J Appl Physiol* 2012. PubMed 22367011; Plews DJ et al. Training adaptation and heart rate variability in elite endurance athletes. *Sports Med* 2013;43:773–781

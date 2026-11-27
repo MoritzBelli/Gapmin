@@ -14,13 +14,14 @@ Die App liest den Gadgetbridge-Export direkt auf dem Handy und funktioniert offl
 
 ## Stand
 
+- [x] **Heute**: 24-Stunden-Chronogramm (Puls, Stress, Body Battery, Schlafphasen), Signale HRV-Steuerung · Belastung · Schlaf, Kennzahlen gegen die eigene 28-Tage-Baseline mit Sparkline und 90-Tage-Statistik
 - [x] **Läufe**: Galerie mit Neon-Streckenformen, Monatsgruppen, Filter nach Lauftyp (automatisch klassifiziert), Detailansicht mit Pace-, HF- und Höhenprofil, Wischen zwischen Läufen
-- [x] **Schlaf**: Gapmin-Schlafscore auf Basis aktueller Studien ([Recherche & Konzept](docs/research/schlaf-score.md)), Hypnogramm, Teilscores, alle Nachtwerte, Verlauf
+- [x] **Training** ([Recherche](docs/research/training.md)): Banister-TRIMP, Fitness/Ermüdung/Form (CTL/ATL/TSB), ACWR (EWMA), Monotonie und Strain, Intensitätsverteilung (Seiler, Polarisationsindex), VO2max-Schätzung (ACSM + %HRR), VDOT, Bestzeiten und Riegel-Prognosen; je Lauf TRIMP, Efficiency Factor, Entkopplung, steigungskorrigierte Pace (Minetti), Zonen, Splits; Garmin-Werte aus dem Connect-Export
+- [x] **Schlaf**: Gapmin-Schlafscore auf Basis aktueller Studien ([Recherche & Konzept](docs/research/schlaf-score.md)), Hypnogramm, Teilscores, alle Nachtwerte, Verlauf; Rhythmus mit Sleep Regularity Index, Social Jetlag, Chronotyp, Schlafbilanz und Schlaffenster
+- [x] **Trends**: HRV-Steuerung (7-Tage-ln-RMSSD gegen SWC), Langzeittrends mit Minimap, alle Gesundheitskennzahlen gegen die Baseline ([Methodik](docs/research/gesundheit.md))
 - [x] **Import**: Gadgetbridge-ZIP oder -Datenbank, inkrementell, GPX- und FIT-Strecken; die App merkt sich die Exportdatei und übernimmt neue Daten beim Öffnen automatisch, „Öffnen mit“/„Teilen“ aus anderen Apps
 - [x] **NAS**: FastAPI + PostgreSQL/TimescaleDB, Sync per Upload, Tages- und Wochenansichten in SQL
 - [x] **Android**: native App in Kotlin und Jetpack Compose, APK-Build per GitHub Actions ([Anleitung](docs/ANDROID.md))
-- [ ] Gesundheit: Tagesansicht für HRV-Status, Body Battery, Stress, Ruhepuls
-- [ ] Trends und Langzeitverläufe, Trainingsbelastung
 - [ ] Lokale KI (Ollama) auf dem NAS
 
 ## Entwicklung
@@ -47,9 +48,9 @@ docker compose up -d    # API auf Port 8085
 
 | Pfad | Inhalt |
 |---|---|
-| `android/app/src/main/java/de/moritzbelli/gapmin/core/` | Plattformunabhängiger Kern: Schema, Gadgetbridge-Import, GPX/FIT, Läufe, Schlafscore |
+| `android/app/src/main/java/de/moritzbelli/gapmin/core/` | Plattformunabhängiger Kern: Schema, Gadgetbridge-Import, GPX/FIT, Läufe, Schlafscore, Lauf- und Trainingsanalyse, Rhythmus, HRV-Steuerung |
 | `android/app/src/main/java/de/moritzbelli/gapmin/data/` | SQLite (gebündelt), NAS-Sync |
-| `android/app/src/main/java/de/moritzbelli/gapmin/ui/` | Compose-Oberfläche: Läufe, Detail, Schlaf, Daten, Design-Tokens (`Theme.kt`) |
+| `android/app/src/main/java/de/moritzbelli/gapmin/ui/` | Compose-Oberfläche: Heute (Chronogramm), Läufe + Analyse, Detail, Schlaf, Trends, Daten, Bausteine (`Kit.kt`, `Charts.kt`), Design-Tokens (`Theme.kt`) |
 | `server/` | NAS-API, Migrationen (PostgreSQL/TimescaleDB), Docker Compose |
 | `scripts/` | Demo-Export, App-Icons, Android-Signierschlüssel |
 | `web/` | Frühere Web-Version (Browser-Prototyp) |
