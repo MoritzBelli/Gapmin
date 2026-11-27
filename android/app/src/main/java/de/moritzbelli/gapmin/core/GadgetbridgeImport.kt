@@ -249,6 +249,24 @@ class GadgetbridgeImport(
             stmts.forEach { it.close() }
         }
 
+        // ---- daily records (Garmin Connect data export, see scripts/garmin_export_to_gb.py) ----
+        if ("GAPMIN_DAILY" in tables) {
+            onProgress(ImportProgress("Tageswerte", 0.86f))
+            val daily = db.prepare("INSERT OR REPLACE INTO daily_summary (date, kind, data) VALUES (?,?,?)")
+            try {
+                db.transaction {
+                    gb.forEach("SELECT DATE, KIND, DATA FROM GAPMIN_DAILY") { r ->
+                        val date = r[0].str() ?: return@forEach
+                        val kind = r[1].str() ?: return@forEach
+                        daily.run(listOf(date, kind, r[2].str()))
+                        samples++
+                    }
+                }
+            } finally {
+                daily.close()
+            }
+        }
+
         // ---- derived data --------------------------------------------------
         onProgress(ImportProgress("Schlaf auswerten", 0.88f))
         val nights = if (earliestSleepTs < Long.MAX_VALUE) SleepJob.recompute(db, earliestSleepTs) else 0

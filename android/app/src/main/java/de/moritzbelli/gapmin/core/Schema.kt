@@ -97,6 +97,15 @@ CREATE TABLE IF NOT EXISTS hrv_summary (
   PRIMARY KEY (device_id, ts)
 ) WITHOUT ROWID;
 
+-- Daily records that have no time series behind them, e.g. from a Garmin Connect data export
+-- (kind: garmin_uds | garmin_sleep | garmin_readiness | garmin_health | garmin_load | ...; data = raw JSON of that day)
+CREATE TABLE IF NOT EXISTS daily_summary (
+  date TEXT NOT NULL,                 -- local calendar date YYYY-MM-DD
+  kind TEXT NOT NULL,
+  data TEXT,
+  PRIMARY KEY (date, kind)
+) WITHOUT ROWID;
+
 -- One row per night, computed by the app (see docs/research/schlaf-score.md)
 CREATE TABLE IF NOT EXISTS sleep_nights (
   night            TEXT PRIMARY KEY,  -- local date of waking up, YYYY-MM-DD
