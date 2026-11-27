@@ -3,7 +3,9 @@ package de.moritzbelli.gapmin.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -16,12 +18,15 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -100,13 +105,13 @@ fun Modifier.pressable(onClick: () -> Unit, haptic: Boolean = false): Modifier =
         }
 }
 
+/** Panel: a quiet surface without a frame; grouping comes from brightness and space (DESIGN.md). */
 @Composable
 fun GCard(modifier: Modifier = Modifier, padding: Dp = G.s5, content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier
             .clip(RoundedCornerShape(G.rLg))
-            .background(G.surface1)
-            .border(1.dp, G.hairline, RoundedCornerShape(G.rLg))
+            .background(G.panel)
             .padding(padding),
         content = content,
     )
@@ -120,20 +125,20 @@ fun GCard(modifier: Modifier = Modifier, padding: Dp = G.s5, content: @Composabl
 fun CardHead(title: String, trailing: String? = null, info: String? = null) {
     var open by remember { mutableStateOf(false) }
     // long meta (e.g. "zuletzt 26. Nov. 2026, 19:32") goes below the title on phones
-    val long = trailing != null && trailing.length > 12
+    val long = trailing != null && trailing.length > 16
     Column(Modifier.fillMaxWidth().padding(bottom = G.s4)) {
-        Row(verticalAlignment = if (info != null) Alignment.CenterVertically else Alignment.Bottom) {
-            Text(title, style = T.mdMedium, modifier = Modifier.weight(1f), maxLines = 1)
-            if (trailing != null && !long) Label(trailing)
+        Row(Modifier.heightIn(min = 32.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                title.uppercase(), style = T.label, color = G.text2,
+                modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            if (trailing != null && !long) Text(trailing, style = T.stat, color = G.text3, maxLines = 1)
             if (info != null) {
                 if (trailing != null && !long) Spacer(Modifier.width(G.s1))
                 InfoButton(open, { open = !open })
             }
         }
-        if (long && trailing != null) {
-            Spacer(Modifier.height(2.dp))
-            Label(trailing)
-        }
+        if (long && trailing != null) Text(trailing, style = T.stat, color = G.text3, maxLines = 1)
         if (info != null) InfoPanel(open, info)
     }
 }
@@ -207,7 +212,7 @@ fun FilterChip(label: String, selected: Boolean, color: Color?, onClick: () -> U
             .background(bg)
             .border(1.dp, if (selected) Color.Transparent else G.hairline, CircleShape)
             .pressable(onClick, haptic = true)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 13.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (color != null) {
@@ -218,30 +223,24 @@ fun FilterChip(label: String, selected: Boolean, color: Color?, onClick: () -> U
     }
 }
 
-/** Exclusive choice (sort order, range); the only control shape for that, see DESIGN.md. */
+/** Exclusive choice (sort order, range); the only control shape for that, see DESIGN.md. The selection slides between options. */
 @Composable
 fun <K> Segmented(options: List<Pair<K, String>>, selected: K, onSelect: (K) -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        modifier
-            .clip(CircleShape)
-            .background(G.surface1)
-            .border(1.dp, G.hairline, CircleShape)
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        for ((k, label) in options) {
-            val on = k == selected
-            val bg by animateColorAsState(if (on) G.surface3 else Color.Transparent, tween(G.T_BASE), label = "seg")
-            Box(
-                Modifier
-                    .weight(1f)
-                    .clip(CircleShape)
-                    .background(bg)
-                    .pressable({ onSelect(k) }, haptic = true)
-                    .padding(vertical = 8.dp, horizontal = 10.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(label, style = T.sm, color = if (on) G.text1 else G.text2, maxLines = 1)
+    val idx = options.indexOfFirst { it.first == selected }.coerceAtLeast(0)
+    BoxWithConstraints(modifier.clip(CircleShape).background(G.panel).padding(3.dp)) {
+        val w = maxWidth / options.size.coerceAtLeast(1)
+        val x by animateDpAsState(w * idx, spring(dampingRatio = 0.82f, stiffness = 420f), label = "seg")
+        Box(Modifier.offset(x = x).width(w).height(34.dp).clip(CircleShape).background(G.surface3))
+        Row(Modifier.fillMaxWidth()) {
+            for ((i, o) in options.withIndex()) {
+                val on = i == idx
+                val fg by animateColorAsState(if (on) G.text1 else G.text3, tween(G.T_BASE), label = "segText")
+                Box(
+                    Modifier.weight(1f).height(34.dp).clip(CircleShape).pressable({ onSelect(o.first) }, haptic = true),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(o.second, style = T.sm, color = fg, maxLines = 1)
+                }
             }
         }
     }

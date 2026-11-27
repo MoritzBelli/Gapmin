@@ -23,6 +23,8 @@ object G {
     // Surfaces: near-black base, elevation by white alpha (OLED-friendly)
     val bg = Color(0xFF060708)
     val surface1 = Color.White.copy(alpha = 0.028f)
+    /** Panel surface (no frame). */
+    val panel = Color.White.copy(alpha = 0.034f)
     val surface2 = Color.White.copy(alpha = 0.05f)
     val surface3 = Color.White.copy(alpha = 0.08f)
     val surfaceSolid = Color(0xFF101113)
@@ -80,7 +82,13 @@ object G {
     val s5 = 24.dp; val s6 = 32.dp; val s7 = 48.dp; val s8 = 64.dp
 
     // Shape
-    val rSm = 10.dp; val rMd = 16.dp; val rLg = 24.dp
+    val rSm = 10.dp; val rMd = 16.dp; val rLg = 26.dp
+
+    /** Training-load series. */
+    val fitness = Color(0xFF60A5FA)
+    val fatigue = Color(0xFFFF6B8A)
+    val form = Color(0xFFD4FF3A)
+    val caution = Color(0xFFFFB36B)
 
     // Motion
     val easeOut = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
@@ -89,6 +97,9 @@ object G {
     const val T_BASE = 220
     const val T_SLOW = 420
     const val T_DRAW = 900
+    const val T_HERO = 1400
+    /** Delay between staggered sections. */
+    const val STAGGER = 45L
 
     fun runColor(c: RunCategory) = when (c) {
         RunCategory.EASY -> runEasy
@@ -114,9 +125,20 @@ val Inter = FontFamily(
     Font(R.font.inter_semibold, FontWeight.SemiBold),
 )
 
+/** Monospace for labels, axes and statistics (the "instrument" layer); Inter carries values and text. */
+val Mono = FontFamily(
+    Font(R.font.jbmono_regular, FontWeight.Normal),
+    Font(R.font.jbmono_medium, FontWeight.Medium),
+)
+
 /** Type scale for phones (web sizes scaled to a 360–430 dp wide screen). */
 object T {
     private val base = TextStyle(fontFamily = Inter, color = G.text1, fontFeatureSettings = "tnum")
+    private val mono = TextStyle(fontFamily = Mono, color = G.text3)
+    /** Hero figure (score, Body Battery). */
+    val hero = base.copy(fontSize = 64.sp, fontWeight = FontWeight.Light, letterSpacing = (-0.05).em, lineHeight = 64.sp)
+    /** Screen title. */
+    val title = base.copy(fontSize = 30.sp, fontWeight = FontWeight.Light, letterSpacing = (-0.03).em, lineHeight = 34.sp)
     val display = base.copy(fontSize = 40.sp, fontWeight = FontWeight.Medium, letterSpacing = (-0.045).em, lineHeight = 42.sp)
     val xxl = base.copy(fontSize = 30.sp, fontWeight = FontWeight.Light, letterSpacing = (-0.035).em, lineHeight = 32.sp)
     val xl = base.copy(fontSize = 24.sp, fontWeight = FontWeight.Light, letterSpacing = (-0.035).em, lineHeight = 26.sp)
@@ -124,8 +146,13 @@ object T {
     val md = base.copy(fontSize = 15.sp, fontWeight = FontWeight.Normal, lineHeight = 21.sp)
     val mdMedium = md.copy(fontWeight = FontWeight.Medium)
     val sm = base.copy(fontSize = 13.sp, fontWeight = FontWeight.Normal, color = G.text2, lineHeight = 18.sp)
-    val label = base.copy(fontSize = 10.5.sp, fontWeight = FontWeight.Medium, color = G.text3, letterSpacing = 0.09.em, lineHeight = 14.sp)
+    /** Section and value labels: monospace caps. */
+    val label = mono.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.08.em, lineHeight = 14.sp)
     val unit = base.copy(fontSize = 12.sp, fontWeight = FontWeight.Normal, color = G.text3)
+    /** Statistics, meta lines, deltas. */
+    val stat = mono.copy(fontSize = 11.sp, color = G.text2, lineHeight = 15.sp)
+    /** Chart axes. */
+    val axis = mono.copy(fontSize = 9.sp, color = G.text3)
 }
 
 @Composable

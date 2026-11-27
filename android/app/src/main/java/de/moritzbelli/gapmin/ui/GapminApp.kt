@@ -5,6 +5,9 @@ package de.moritzbelli.gapmin.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.animateDpAsState
@@ -52,6 +55,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import de.moritzbelli.gapmin.Notice
@@ -86,6 +91,7 @@ fun GapminApp(
     var filter by rememberSaveable { mutableStateOf<RunCategory?>(null) }
     var sort by rememberSaveable { mutableStateOf(RunSort.DATE) }
     var night by rememberSaveable { mutableIntStateOf(0) }
+    var runsMode by rememberSaveable { mutableStateOf(RunsMode.GALLERY) }
     var day by rememberSaveable { mutableIntStateOf(0) }
     var routedEmpty by rememberSaveable { mutableStateOf(false) }
     val todayList = rememberLazyListState()
@@ -126,6 +132,7 @@ fun GapminApp(
                         runs = visible,
                         initialId = runId,
                         shared = shared,
+                        hr = state.insights.training?.hr,
                         loadTrack = loadTrack,
                         onPageRun = { },
                         onClose = { openRun = null },
@@ -142,21 +149,24 @@ fun GapminApp(
                         ) { t ->
                             when (t) {
                                 Tab.TODAY -> TodayScreen(
-                                    state.days, state.nights, state.runs, day, { day = it }, loadDay, todayList, bottomPad,
+                                    state.days, state.nights, state.runs, state.insights, day, { day = it }, loadDay, todayList, bottomPad,
                                     onOpenSleep = { tab = Tab.SLEEP },
                                     // the run may be hidden by an active filter on the runs tab, so show everything
                                     onOpenRun = { filter = null; openRun = it.id },
+                                    onOpenTraining = { runsMode = RunsMode.ANALYSIS; tab = Tab.RUNS },
+                                    onOpenTrends = { tab = Tab.TRENDS },
                                     onGoToData = { tab = Tab.DATA },
                                 )
                                 Tab.RUNS -> RunsScreen(
-                                    state.runs, visible, filter, sort, runsList, bottomPad, shared,
+                                    state.runs, visible, filter, sort, runsMode, state.insights, runsList, bottomPad, shared,
+                                    onMode = { runsMode = it },
                                     onFilter = { filter = it },
                                     onSort = { sort = it },
                                     onOpen = { openRun = it.id },
                                     onGoToData = { tab = Tab.DATA },
                                 )
-                                Tab.SLEEP -> SleepScreen(state.nights, night, { night = it }, sleepList, bottomPad, onGoToData = { tab = Tab.DATA })
-                                Tab.TRENDS -> TrendsScreen(state.days, trendsList, bottomPad, onGoToData = { tab = Tab.DATA })
+                                Tab.SLEEP -> SleepScreen(state.nights, state.insights, night, { night = it }, sleepList, bottomPad, onGoToData = { tab = Tab.DATA })
+                                Tab.TRENDS -> TrendsScreen(state.days, state.insights, trendsList, bottomPad, onGoToData = { tab = Tab.DATA })
                                 Tab.DATA -> DataScreen(state, actions, dataList, bottomPad)
                             }
                         }
@@ -196,70 +206,56 @@ fun GapminApp(
     }
 }
 
+/**
+ * Floating navigation: icons only, the active tab grows to show its name. Width and colours animate with a soft spring.
+ */
 @Composable
 private fun NavPill(tab: Tab, onSelect: (Tab) -> Unit, busy: Boolean, modifier: Modifier = Modifier) {
     Box(
         modifier
             .fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(G.bg.copy(alpha = 0f), G.bg.copy(alpha = 0.92f), G.bg)))
+            .background(Brush.verticalGradient(listOf(G.bg.copy(alpha = 0f), G.bg.copy(alpha = 0.9f), G.bg)))
             .navigationBarsPadding()
             .padding(top = G.s6, bottom = G.s3),
         contentAlignment = Alignment.Center,
     ) {
-        // labelled tabs share one width; the icon-only data tab is narrower, so the indicator animates offset and width
-        val indicatorX by animateDpAsState(
-            Tab.entries.take(tab.ordinal).fold(0.dp) { acc, t -> acc + t.slot },
-            tween(G.T_SLOW, easing = G.easeOut), label = "indicator",
-        )
-        val indicatorW by animateDpAsState(tab.slot, tween(G.T_SLOW, easing = G.easeOut), label = "indicatorW")
-        Box(
+        Row(
             Modifier
                 .clip(CircleShape)
                 .background(G.surfaceSolid.copy(alpha = 0.96f))
-                .border(1.dp, G.hairlineStrong, CircleShape)
-                .padding(4.dp),
+                .border(1.dp, G.hairline, CircleShape)
+                .padding(5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp),
         ) {
-            // sliding selection indicator
-            Box(
-                Modifier
-                    .offset(x = indicatorX)
-                    .width(indicatorW)
-                    .height(48.dp)
-                    .clip(CircleShape)
-                    .background(G.surface3),
-            )
-            Row {
-                for (t in Tab.entries) {
-                    val on = t == tab
-                    Row(
-                        Modifier
-                            .width(t.slot)
-                            .height(48.dp)
-                            .clip(CircleShape)
-                            .pressable({ onSelect(t) }, haptic = true),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-                    ) {
-                        Icon(
-                            t.icon, t.label, tint = if (on) G.accent else G.text3,
-                            modifier = Modifier.size(if (t.compact) 18.dp else 16.dp),
-                        )
-                        if (!t.compact) {
-                            Spacer(Modifier.width(5.dp))
-                            Text(t.label, style = T.sm, color = if (on) G.text1 else G.text2, maxLines = 1)
-                        }
-                        if (t == Tab.DATA && busy) {
-                            Spacer(Modifier.width(4.dp))
-                            Dot(G.accent, 5.dp)
-                        }
+            for (t in Tab.entries) {
+                val on = t == tab
+                val bg by animateColorAsState(if (on) G.surface3 else Color.Transparent, tween(G.T_BASE), label = "navBg")
+                val tint by animateColorAsState(if (on) G.accent else G.text3, tween(G.T_BASE), label = "navTint")
+                Row(
+                    Modifier
+                        .height(46.dp)
+                        .clip(CircleShape)
+                        .background(bg)
+                        .pressable({ onSelect(t) }, haptic = true)
+                        .animateContentSize(spring(dampingRatio = 0.78f, stiffness = 520f))
+                        .padding(horizontal = if (t.compact) 13.dp else 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(t.icon, t.label, tint = tint, modifier = Modifier.size(if (t.compact) 17.dp else 18.dp))
+                    if (on && !t.compact) {
+                        Spacer(Modifier.width(8.dp))
+                        Text(t.label, style = T.sm.copy(fontWeight = FontWeight.Medium), color = G.text1, maxLines = 1, softWrap = false)
+                    }
+                    if (t == Tab.DATA && busy) {
+                        Spacer(Modifier.width(4.dp))
+                        Dot(G.accent, 5.dp)
                     }
                 }
             }
         }
     }
 }
-
-private val Tab.slot get() = if (compact) 44.dp else 72.dp
 
 @Composable
 private fun NoticeBanner(notice: Notice?, busyStep: String?, onDismiss: () -> Unit, modifier: Modifier) {

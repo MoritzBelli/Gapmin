@@ -41,11 +41,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import de.moritzbelli.gapmin.core.Fmt
+import de.moritzbelli.gapmin.core.Insights
 import de.moritzbelli.gapmin.core.RunCategory
 import de.moritzbelli.gapmin.core.RunSummary
 import kotlinx.coroutines.delay
 
 enum class RunSort(val label: String) { DATE("Neueste"), DISTANCE("Längste"), PACE("Schnellste") }
+
+/** Gallery of runs or the training analysis (load, intensity, VO2max, records). */
+enum class RunsMode(val label: String) { GALLERY("Galerie"), ANALYSIS("Analyse") }
 
 fun visibleRuns(runs: List<RunSummary>, filter: RunCategory?, sort: RunSort): List<RunSummary> {
     val f = runs.filter { filter == null || it.category == filter }
@@ -71,9 +75,12 @@ fun RunsScreen(
     visible: List<RunSummary>,
     filter: RunCategory?,
     sort: RunSort,
+    mode: RunsMode,
+    insights: Insights,
     listState: LazyListState,
     bottomPadding: Dp,
     shared: SharedRoute?,
+    onMode: (RunsMode) -> Unit,
     onFilter: (RunCategory?) -> Unit,
     onSort: (RunSort) -> Unit,
     onOpen: (RunSummary) -> Unit,
@@ -88,20 +95,30 @@ fun RunsScreen(
         }
         val dist = visible.sumOf { it.distanceM }
         val hours = visible.sumOf { it.durationS } / 3600
+        val reveal = rememberReveal()
 
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(start = G.s4, end = G.s4, bottom = bottomPadding),
         ) {
+            item(key = "head") {
+                val first = allRuns.minOfOrNull { it.startTs }
+                ScreenHeader("Läufe", if (first == null) "Noch keine Läufe" else "seit ${Fmt.month(first)}")
+            }
+            item(key = "mode") {
+                Segmented(RunsMode.entries.map { it to it.label }, mode, onMode, Modifier.fillMaxWidth().padding(bottom = G.s3))
+            }
+            if (mode == RunsMode.ANALYSIS) {
+                item(key = "analysis") { TrainingAnalysis(insights.training, insights.garmin, reveal, onGoToData) }
+                return@LazyColumn
+            }
             item(key = "hero") {
-                Totals(
-                    listOf(
-                        Triple("Läufe", visible.size.toString(), ""),
-                        Triple("Distanz", Fmt.km(dist, 0), "km"),
-                        Triple("Zeit", Fmt.num(hours), "h"),
-                    ),
-                )
+                Row(Modifier.fillMaxWidth().padding(top = G.s2, bottom = G.s4), horizontalArrangement = Arrangement.spacedBy(G.s6)) {
+                    Column { Label("Läufe"); CountUp(visible.size.toDouble(), { Fmt.num(it) }, style = T.xxl) }
+                    Column { Label("Distanz"); CountUp(dist / 1000, { Fmt.num(it) }, "km", T.xxl) }
+                    Column { Label("Zeit"); CountUp(hours, { Fmt.num(it) }, "h", T.xxl) }
+                }
             }
             item(key = "toolbar") {
                 Column(Modifier.fillMaxWidth().padding(bottom = G.s2)) {
@@ -168,7 +185,7 @@ private fun MonthHeader(title: String, count: Int, dist: Double) {
         verticalAlignment = Alignment.Bottom,
     ) {
         Text(title, style = T.mdMedium, modifier = Modifier.weight(1f))
-        Text("$count Läufe · ${Fmt.km(dist, 0)} km", style = T.sm, color = G.text3)
+        Text("$count Läufe · ${Fmt.km(dist, 0)} km", style = T.stat, color = G.text3)
     }
 }
 
@@ -188,8 +205,7 @@ fun RunTile(run: RunSummary, index: Int, shared: SharedRoute?, modifier: Modifie
                 translationY = (1 - appear.value) * 14.dp.toPx()
             }
             .clip(RoundedCornerShape(G.rLg))
-            .background(G.surface1)
-            .border(1.dp, G.hairline, RoundedCornerShape(G.rLg))
+            .background(G.panel)
             .pressable(onClick)
             .padding(G.s3),
     ) {
@@ -203,7 +219,7 @@ fun RunTile(run: RunSummary, index: Int, shared: SharedRoute?, modifier: Modifie
             Box(Modifier.align(Alignment.TopStart).padding(2.dp)) { TypeTag(run.category.label, color) }
         }
         Spacer(Modifier.height(G.s2))
-        Text("${Fmt.date(run.startTs)} · ${Fmt.time(run.startTs)}", style = T.label.copy(letterSpacing = T.sm.letterSpacing), color = G.text3, maxLines = 1)
+        Text("${Fmt.date(run.startTs)} · ${Fmt.time(run.startTs)}", style = T.stat, color = G.text3, maxLines = 1)
         Spacer(Modifier.height(2.dp))
         ValueUnit(Fmt.km(run.distanceM), "km", T.xl)
         Spacer(Modifier.height(G.s2))

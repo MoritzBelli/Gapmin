@@ -16,6 +16,11 @@ data class RunSummary(
     val calories: Int?,
     val cadence: Int?,
     val preview: List<LatLon>,
+    /** Track analysis (RunAnalysis), null without a usable track. */
+    val metrics: RunMetrics? = null,
+    /** Garmin values from the activity summary. */
+    val teAnaerobic: Double? = null,
+    val recoveryH: Double? = null,
 )
 
 data class TrackSample(val t: Long, val dist: Double?, val speed: Double?, val hr: Double?, val ele: Double?)
@@ -54,8 +59,9 @@ data class Stats(val activities: Int, val nights: Int, val samples: Long, val la
 object Repo {
     fun listRuns(db: Sql): List<RunSummary> =
         db.query(
-            """SELECT id, name, category, sport, start_ts, distance_m, duration_s, avg_pace_s_km, avg_hr, max_hr, ascent_m,
-                      te_aerobic, route_preview, calories, avg_cadence FROM activities ORDER BY start_ts DESC""",
+            """SELECT a.id, a.name, a.category, a.sport, a.start_ts, a.distance_m, a.duration_s, a.avg_pace_s_km, a.avg_hr, a.max_hr,
+                      a.ascent_m, a.te_aerobic, a.route_preview, a.calories, a.avg_cadence, r.data, a.te_anaerobic, a.recovery_h
+               FROM activities a LEFT JOIN run_metrics r ON r.activity_id = a.id ORDER BY a.start_ts DESC""",
         ).filter { Runs.isRun(it[3].str()) }.map { r ->
             RunSummary(
                 id = r[0].str()!!,
@@ -77,6 +83,9 @@ object Repo {
                     val lon = l.getOrNull(1).asDouble() ?: return@mapNotNull null
                     LatLon(lat, lon)
                 } ?: emptyList(),
+                metrics = RunMetrics.parse(r[15].str()),
+                teAnaerobic = r[16].num(),
+                recoveryH = r[17].num()?.let { if (it > 96) it / 60 else it }, // Garmin caps at 96 h; larger values are minutes
             )
         }
 

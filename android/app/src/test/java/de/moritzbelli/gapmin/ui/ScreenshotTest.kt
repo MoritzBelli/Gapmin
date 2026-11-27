@@ -7,12 +7,15 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import de.moritzbelli.gapmin.UiState
 import de.moritzbelli.gapmin.core.GadgetbridgeImport
 import de.moritzbelli.gapmin.core.Health
+import de.moritzbelli.gapmin.core.Insights
+import de.moritzbelli.gapmin.core.RunAnalysis
 import de.moritzbelli.gapmin.core.JdbcSql
 import de.moritzbelli.gapmin.core.Repo
 import de.moritzbelli.gapmin.core.Schema
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.unit.dp
 import org.junit.Rule
 import org.junit.Test
@@ -39,7 +42,16 @@ class ScreenshotTest {
         db = JdbcSql.open(null)
         Schema.migrate(db)
         GadgetbridgeImport(db, { JdbcSql.open(it, readOnly = true) }, File(System.getProperty("java.io.tmpdir"), "gapmin-shot")).run(demo)
-        UiState(loaded = true, runs = Repo.listRuns(db), nights = Repo.listNights(db), days = Health.listDays(db, 100_000), stats = Repo.stats(db))
+        RunAnalysis.update(db)
+        val nights = Repo.listNights(db)
+        val days = Health.listDays(db, 100_000)
+        val runs = Repo.listRuns(db)
+        // the demo ends on a fixed date: evaluate training load as of the last run, not as of the build day
+        val last = java.time.Instant.ofEpochSecond(runs.maxOf { it.startTs }).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay()
+        UiState(
+            loaded = true, runs = runs, nights = nights, days = days, stats = Repo.stats(db),
+            insights = Insights.compute(db, days, nights, last),
+        )
     }
 
     private val actions = DataActions({}, {}, {}, {}, { _, _, _ -> }, {}, {})
@@ -75,4 +87,25 @@ class ScreenshotTest {
         ) { HealthTrends(state.days, 0) }
     }
     @Test fun data() = shot("5-daten", Tab.DATA)
+    @Test fun analysis() = render("8-laeufe-analyse") {
+        androidx.compose.foundation.layout.Box(
+            androidx.compose.ui.Modifier.fillMaxSize().background(G.bg).padding(16.dp),
+        ) {
+            androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                TrainingAnalysis(state.insights.training, state.insights.garmin, rememberReveal()) {}
+            }
+        }
+    }
+    @Test fun todayLower() = render("9-heute-kennzahlen") {
+        val list = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = 3)
+        TodayScreen(
+            state.days, state.nights, state.runs, state.insights, 0, {}, { d, cb -> cb(Health.daySeries(db, d)) }, list, 120.dp,
+            {}, {}, {}, {}, {},
+        )
+    }
+    @Test fun runDetailLower() = render("10-lauf-analyse") {
+        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().background(G.bg).padding(16.dp)) {
+            RunAnalysisCard(state.runs[1], state.insights.training?.hr)
+        }
+    }
 }

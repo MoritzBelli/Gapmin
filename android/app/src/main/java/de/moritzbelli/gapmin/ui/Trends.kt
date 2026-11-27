@@ -360,7 +360,7 @@ private fun TrendCanvas(
     onCursor: (Int?) -> Unit,
 ) {
     val measurer = rememberTextMeasurer()
-    val axis = TextStyle(fontFamily = Inter, fontSize = 9.5.sp, color = G.text3)
+    val axis = T.axis
     val d0 = winStart
     val d1 = if (winEnd <= winStart) winStart + 1 else winEnd
     val curNow by rememberUpdatedState(cursor)

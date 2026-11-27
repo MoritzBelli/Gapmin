@@ -8,7 +8,7 @@ package de.moritzbelli.gapmin.core
  * durations in seconds unless the column name says otherwise (`*_min`).
  */
 object Schema {
-    const val VERSION = 1
+    const val VERSION = 2
 
     val SQL = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -145,6 +145,13 @@ CREATE TABLE IF NOT EXISTS sleep_nights (
   garmin_score     INTEGER,
   details          TEXT,              -- JSON: hypnogram, sub-metrics, factors
   updated_at       INTEGER
+);
+
+-- Per-run analysis of the track (RunAnalysis): heart rate histogram, splits, best efforts, efficiency, grade-adjusted pace
+CREATE TABLE IF NOT EXISTS run_metrics (
+  activity_id TEXT PRIMARY KEY,
+  version     INTEGER NOT NULL,
+  data        TEXT                  -- JSON, NULL if the track is too short to analyse
 );
 """
 

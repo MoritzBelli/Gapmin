@@ -57,6 +57,8 @@ import androidx.compose.ui.unit.sp
 import de.moritzbelli.gapmin.core.Baselines
 import de.moritzbelli.gapmin.core.Component
 import de.moritzbelli.gapmin.core.Fmt
+import de.moritzbelli.gapmin.core.Insights
+import de.moritzbelli.gapmin.core.Rhythm
 import de.moritzbelli.gapmin.core.Sleep
 import de.moritzbelli.gapmin.core.SleepJob
 import de.moritzbelli.gapmin.core.SleepNight
@@ -196,8 +198,31 @@ private val SLEEP_TRENDS = listOf(
 )
 
 @Composable
-internal fun SleepTrends(nights: List<SleepNight>, selected: Int) =
-    TrendsCard("Langzeittrends", SLEEP_TRENDS, nights, selected, nightDay, nightDate)
+internal fun SleepTrends(nights: List<SleepNight>, selected: Int, sri: Map<String, Double> = emptyMap()) {
+    val defs = remember(sri) { if (sri.isEmpty()) SLEEP_TRENDS else SLEEP_TRENDS + sriDef(sri) }
+    TrendsCard("Langzeittrends", defs, nights, selected, nightDay, nightDate)
+}
+
+/** Sleep Regularity Index per night (7 days ending with it), Phillips et al. 2017. */
+private fun sriDef(sri: Map<String, Double>) = MetricDef<SleepNight>(
+    "Sleep Regularity Index", { sri[it.night] }, digits = 1, better = 1, color = G.sleepColor,
+    ref = "UK Biobank: Median 81, IQR 74–86 (Windred 2024)", refLo = 73.8, refHi = 86.3,
+    note = "Wahrscheinlichkeit, 24 h später im selben Zustand (Schlaf/wach) zu sein, über 7 Tage, skaliert auf −100…100. 100 = identische Schlafzeiten.",
+)
+
+private const val RHYTHM_INFO =
+    "Sleep Regularity Index (SRI, Phillips et al. 2017): Wahrscheinlichkeit, zu zwei Zeitpunkten im Abstand von 24 h im selben Zustand " +
+        "(Schlaf oder wach) zu sein, über die letzten 7 Tage in 5-Minuten-Epochen, skaliert auf −100 bis 100. In der UK Biobank " +
+        "(n ≈ 61 000, Beschleunigungsmessung) lag der Median bei 81 (IQR 73,8–86,3); regelmäßigerer Schlaf ging mit 20–48 % niedrigerem " +
+        "Sterberisiko einher und sagte es besser vorher als die Schlafdauer (Windred et al. 2024). Die Uhr erfasst nur den Hauptschlaf, " +
+        "Nickerchen zählen als wach.\n\n" +
+        "Social Jetlag: Differenz der Schlafmitte an freien Tagen (Nächte auf Sa/So) und Arbeitstagen, letzte 28 Nächte (Wittmann et al. 2006). " +
+        "Mehr als 1 h war mit höherem BMI assoziiert (Roenneberg et al. 2012).\n\n" +
+        "Chronotyp (MSFsc): Schlafmitte freier Tage, korrigiert um den Nachholschlaf (Roenneberg et al. 2004). Früher = Lerche, später = Eule.\n\n" +
+        "Schlafbilanz: Σ (Gesamtschlafzeit − 7 h) der letzten 7 Nächte; 7 h ist die Mindestempfehlung der AASM (Watson et al. 2015). " +
+        "Streuung: SD der Gesamtschlafzeit; eine hohe Nacht-zu-Nacht-Variabilität ist mit schlechterer Gesundheit assoziiert (Bei et al. 2016).\n\n" +
+        "Unten: Schlaffenster der letzten 21 Nächte (18–12 Uhr), freie Tage hervorgehoben."
+
 
 // ---- score derivation texts --------------------------------------------------------------------
 
@@ -294,6 +319,7 @@ private const val STAGE_INFO =
 @Composable
 fun SleepScreen(
     nights: List<SleepNight>,
+    insights: Insights,
     selected: Int,
     onSelect: (Int) -> Unit,
     listState: LazyListState,
@@ -301,14 +327,17 @@ fun SleepScreen(
     onGoToData: () -> Unit,
 ) {
     val n = nights.getOrNull(selected)
+    val reveal = rememberReveal()
+    val sriMetric = remember(insights.sri) { if (insights.sri.isEmpty()) null else sriDef(insights.sri) }
 
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize().statusBarsPadding(),
-        contentPadding = PaddingValues(start = G.s4, end = G.s4, top = G.s4, bottom = bottomPadding),
+        contentPadding = PaddingValues(start = G.s4, end = G.s4, bottom = bottomPadding),
         verticalArrangement = Arrangement.spacedBy(G.s3),
     ) {
         if (n == null) {
+            item(key = "head") { ScreenHeader("Schlaf", "Noch keine Nächte") }
             item(key = "empty") {
                 Column(Modifier.fillMaxWidth().padding(vertical = G.s8), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Noch keine Schlafdaten.", style = T.md, color = G.text2)
@@ -318,15 +347,19 @@ fun SleepScreen(
             }
             return@LazyColumn
         }
+        item(key = "head") {
+            ScreenHeader(if (selected == 0) "Letzte Nacht" else Fmt.dayShort(n.night), "Nacht zum ${Fmt.dayLong(n.night)}")
+        }
         item(key = "strip") { NightStrip(nights, selected, onSelect) }
-        item(key = "score") { ScoreCard(nights, selected) }
-        item(key = "hypno") { HypnoCard(nights, selected) }
-        item(key = "trends") { SleepTrends(nights, selected) }
-        item(key = "derivation") { DerivationCard(n) }
+        item(key = "score") { Box(Modifier.reveal(reveal, "score", 0)) { ScoreCard(nights, selected) } }
+        item(key = "hypno") { Box(Modifier.reveal(reveal, "hypno", 1)) { HypnoCard(nights, selected) } }
+        item(key = "rhythm") { Box(Modifier.reveal(reveal, "rhythm", 2)) { RhythmCard(nights, selected) } }
+        item(key = "trends") { Box(Modifier.reveal(reveal, "trends", 3)) { SleepTrends(nights, selected, insights.sri) } }
+        item(key = "derivation") { Box(Modifier.reveal(reveal, "derivation", 4)) { DerivationCard(n) } }
         item(key = "metrics") {
             BaselineOverview(
                 "Kennzahlen", listOf(
-                    MetricSection("Dauer & Timing", TIMING_DEFS),
+                    MetricSection("Dauer & Timing", TIMING_DEFS + listOfNotNull(sriMetric)),
                     MetricSection("Kontinuität", CONTINUITY_DEFS),
                     MetricSection("Architektur", ARCH_DEFS),
                     MetricSection("Autonome Physiologie", AUTONOMIC_DEFS),
@@ -365,25 +398,27 @@ private fun ScoreCard(nights: List<SleepNight>, selected: Int) {
         }
     }
     GCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            ScoreRing(n.score, color, Modifier.size(116.dp))
-            Spacer(Modifier.width(G.s5))
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Label(if (selected == 0) "Letzte Nacht" else Fmt.dayShort(n.night), Modifier.weight(1f))
-                    InfoButton(infoOpen, { infoOpen = !infoOpen })
-                }
-                Text(n.label, style = T.lg.copy(fontSize = 24.sp), color = color)
-                Text("${Fmt.time(n.onsetTs)} – ${Fmt.time(n.wakeTs)} · ${Fmt.hm(n.tstMin)} h", style = T.sm, color = G.text2)
-                if (n.garminScore != null) Text("Garmin ${n.garminScore}", style = T.sm, color = G.text3)
-            }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("GAPMIN-SCHLAFSCORE", style = T.label, color = G.text2, modifier = Modifier.weight(1f))
+            InfoButton(infoOpen, { infoOpen = !infoOpen })
+        }
+        Box(Modifier.fillMaxWidth().padding(vertical = G.s2), contentAlignment = Alignment.Center) {
+            ScoreRing(n.score, color, Modifier.size(184.dp), fontSize = 64.sp)
+        }
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(n.label, style = T.lg.copy(fontSize = 24.sp), color = color)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                "${Fmt.time(n.onsetTs)} – ${Fmt.time(n.wakeTs)} · ${Fmt.hm(n.tstMin)} h" + (n.garminScore?.let { " · Garmin $it" } ?: ""),
+                style = T.stat, color = G.text2,
+            )
         }
         InfoPanel(infoOpen, info)
         Spacer(Modifier.height(G.s4))
         Row(Modifier.fillMaxWidth()) {
-            StatCell("Ø 7 N.", d7?.let { Fmt.num(it.mean) } ?: "–", d7?.let { "± ${Fmt.num(it.sd, 1)}" } ?: "", Modifier.weight(1f))
-            StatCell("Baseline 28 N.", d28?.let { Fmt.num(it.mean) } ?: "–", d28?.let { "± ${Fmt.num(it.sd, 1)}" } ?: "", Modifier.weight(1f))
-            StatCell("Perzentil 90 N.", rank?.let { "P${it.roundToInt()}" } ?: "–", "", Modifier.weight(1f))
+            StatCell("Ø 7 N.", d7?.let { Fmt.num(it.mean) } ?: "–", d7?.let { "± ${Fmt.num(it.sd, 1)}" } ?: "", Modifier.weight(1f), T.xl.copy(fontSize = 22.sp))
+            StatCell("Baseline 28 N.", d28?.let { Fmt.num(it.mean) } ?: "–", d28?.let { "± ${Fmt.num(it.sd, 1)}" } ?: "", Modifier.weight(1f), T.xl.copy(fontSize = 22.sp))
+            StatCell("Perzentil 90 N.", rank?.let { "P${it.roundToInt()}" } ?: "–", "", Modifier.weight(1f), T.xl.copy(fontSize = 22.sp))
         }
         if (n.factors.isNotEmpty()) {
             Spacer(Modifier.height(G.s4))
@@ -401,15 +436,6 @@ private fun ScoreCard(nights: List<SleepNight>, selected: Int) {
             Spacer(Modifier.height(G.s2))
             Text("Vorläufig: Die persönliche Baseline braucht 7 Nächte (bisher ${n.baselineNights}).", style = T.sm, color = G.text3)
         }
-    }
-}
-
-@Composable
-private fun StatCell(label: String, value: String, sub: String, modifier: Modifier = Modifier) {
-    Column(modifier) {
-        Label(label)
-        Spacer(Modifier.height(2.dp))
-        ValueUnit(value, sub, T.xl.copy(fontSize = 22.sp))
     }
 }
 
@@ -552,7 +578,7 @@ private fun NightStrip(nights: List<SleepNight>, selected: Int, onSelect: (Int) 
         LazyRow(
             state = state,
             reverseLayout = true,
-            modifier = Modifier.fillMaxWidth().height(96.dp),
+            modifier = Modifier.fillMaxWidth().height(80.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
@@ -560,14 +586,16 @@ private fun NightStrip(nights: List<SleepNight>, selected: Int, onSelect: (Int) 
                 StripBar(night, i == selected) { onSelect(i) }
             }
         }
-        Box(Modifier.fillMaxWidth().padding(top = G.s3).height(1.dp).background(G.hairline))
+        Spacer(Modifier.height(G.s1))
     }
 }
 
 @Composable
 private fun StripBar(n: SleepNight, selected: Boolean, onClick: () -> Unit) {
     val c = G.scoreColor(n.score.toDouble())
-    val alpha by animateFloatAsState(if (selected) 1f else 0.32f, tween(G.T_BASE), label = "bar")
+    val alpha by animateFloatAsState(if (selected) 1f else 0.28f, tween(G.T_BASE), label = "bar")
+    val grow = remember(n.night) { Animatable(0f) }
+    LaunchedEffect(n.night) { grow.animateTo(1f, tween(G.T_SLOW, easing = G.easeOut)) }
     val showDate = selected || Fmt.dayOfMonth(n.night) == 1
     Column(
         Modifier.width(12.dp).fillMaxHeight().pressable(onClick, haptic = true),
@@ -576,9 +604,9 @@ private fun StripBar(n: SleepNight, selected: Boolean, onClick: () -> Unit) {
     ) {
         Box(
             Modifier
-                .width(10.dp)
-                .fillMaxHeight(0.78f * (n.score.coerceIn(6, 100) / 100f))
-                .clip(RoundedCornerShape(3.dp))
+                .width(if (selected) 8.dp else 6.dp)
+                .fillMaxHeight((0.76f * (n.score.coerceIn(6, 100) / 100f) * grow.value).coerceAtLeast(0.02f))
+                .clip(RoundedCornerShape(4.dp))
                 .background(c.copy(alpha = alpha)),
         )
         Spacer(Modifier.height(4.dp))
@@ -593,20 +621,38 @@ private fun StripBar(n: SleepNight, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-internal fun ScoreRing(score: Int, color: Color, modifier: Modifier) {
+internal fun ScoreRing(score: Int, color: Color, modifier: Modifier, fontSize: androidx.compose.ui.unit.TextUnit = 34.sp) {
     val sweep = remember { Animatable(0f) }
-    LaunchedEffect(score) { sweep.animateTo(score / 100f, tween(G.T_DRAW, easing = G.easeOut)) }
+    LaunchedEffect(score) { sweep.animateTo(score / 100f, tween(G.T_HERO, easing = G.easeOut)) }
     Box(modifier, contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
-            val sw = 7.dp.toPx()
-            val inset = 8.dp.toPx()
+            val sw = (size.minDimension * 0.055f).coerceAtLeast(5.dp.toPx())
+            val inset = sw * 1.6f
             val arcSize = Size(size.width - 2 * inset, size.height - 2 * inset)
             val tl = Offset(inset, inset)
+            val r = arcSize.width / 2
+            // 40 fine ticks around the track, like an instrument dial
+            for (k in 0 until 40) {
+                val a = Math.toRadians(-90.0 + k * 9.0)
+                val c = center
+                val r0 = r + sw * 0.9f
+                val r1 = r0 + sw * (if (k % 10 == 0) 0.9f else 0.45f)
+                drawLine(
+                    if (k / 40f <= sweep.value) color.copy(alpha = 0.5f) else G.hairline,
+                    Offset(c.x + (r0 * kotlin.math.cos(a)).toFloat(), c.y + (r0 * kotlin.math.sin(a)).toFloat()),
+                    Offset(c.x + (r1 * kotlin.math.cos(a)).toFloat(), c.y + (r1 * kotlin.math.sin(a)).toFloat()),
+                    1.dp.toPx(),
+                )
+            }
             drawArc(G.surface3, -90f, 360f, false, tl, arcSize, style = Stroke(sw))
-            drawArc(color.copy(alpha = 0.25f), -90f, 360f * sweep.value, false, tl, arcSize, style = Stroke(sw * 2.2f, cap = StrokeCap.Round))
-            drawArc(color, -90f, 360f * sweep.value, false, tl, arcSize, style = Stroke(sw, cap = StrokeCap.Round))
+            val brush = androidx.compose.ui.graphics.Brush.sweepGradient(listOf(color.copy(alpha = 0.35f), color, color.copy(alpha = 0.35f)), center)
+            drawArc(color.copy(alpha = 0.22f), -90f, 360f * sweep.value, false, tl, arcSize, style = Stroke(sw * 2.4f, cap = StrokeCap.Round))
+            drawArc(brush, -90f, 360f * sweep.value, false, tl, arcSize, style = Stroke(sw, cap = StrokeCap.Round))
+            val end = Math.toRadians(-90.0 + 360.0 * sweep.value)
+            val p = Offset(center.x + (r * kotlin.math.cos(end)).toFloat(), center.y + (r * kotlin.math.sin(end)).toFloat())
+            drawCircle(G.text1, sw * 0.42f, p)
         }
-        Text((sweep.value * 100).roundToInt().toString(), style = T.xxl.copy(fontSize = 36.sp))
+        Text((sweep.value * 100).roundToInt().toString(), style = T.hero.copy(fontSize = fontSize, lineHeight = fontSize))
     }
 }
 
@@ -615,7 +661,7 @@ internal fun Hypnogram(n: SleepNight, modifier: Modifier) {
     val measurer = rememberTextMeasurer()
     val reveal = remember(n.night) { Animatable(0f) }
     LaunchedEffect(n.night) { reveal.animateTo(1f, tween(G.T_DRAW, easing = G.easeOut)) }
-    val tickStyle = TextStyle(fontFamily = Inter, fontSize = 10.sp, color = G.text3, textAlign = TextAlign.Center)
+    val tickStyle = T.axis.copy(textAlign = TextAlign.Center)
     Canvas(modifier) {
         val total = maxOf(1.0, (n.outTs - n.bedTs) / 60.0)
         val axisH = 18.dp.toPx()
@@ -661,3 +707,95 @@ internal fun Hypnogram(n: SleepNight, modifier: Modifier) {
     }
 }
 
+
+private fun clockText(min: Double): String = Fmt.hm(((min % 1440) + 1440) % 1440) + " Uhr"
+private fun signedHm(min: Double): String = (if (min < 0) "−" else "+") + Fmt.hm(kotlin.math.abs(min)) + " h"
+
+/** Position of an SRI value relative to the UK Biobank distribution (Windred et al. 2024). */
+private fun sriLabel(sri: Double?) = when {
+    sri == null -> "mind. 5 Nächte in Folge nötig"
+    sri >= 86.3 -> "Regelmäßiger als 75 % der UK Biobank"
+    sri >= 73.8 -> "Mittlere Hälfte der UK Biobank"
+    else -> "Unregelmäßiger als 75 % der UK Biobank"
+}
+
+/** Regularity and timing across nights: SRI, social jetlag, chronotype, sleep balance and the sleep windows of three weeks. */
+@Composable
+private fun RhythmCard(nights: List<SleepNight>, selected: Int) {
+    val r = remember(nights, selected) { Rhythm.stats(nights, selected) }
+    GCard {
+        CardHead("Rhythmus", "SRI · 7 Tage", info = RHYTHM_INFO)
+        Row(verticalAlignment = Alignment.Bottom) {
+            CountUp(r.sri, { Fmt.num(it, 1) }, style = T.hero.copy(fontSize = 48.sp))
+            Spacer(Modifier.width(G.s3))
+            Column(Modifier.padding(bottom = 8.dp)) {
+                Text(sriLabel(r.sri), style = T.sm, color = G.text2)
+                if (r.sriPairs > 0) Text("${r.sriPairs} Tagespaare", style = T.stat, color = G.text3)
+            }
+        }
+        Spacer(Modifier.height(G.s3))
+        RangeGauge(r.sri, 40.0, 100.0, listOf(Triple(73.8, 86.3, G.sleepColor)), listOf(40.0, 60.0, 81.0, 100.0), { Fmt.num(it) })
+        Spacer(Modifier.height(G.s3))
+        StatTable(
+            listOf(
+                "Social Jetlag" to (r.sjlMin?.let { "${Fmt.hm(it)} h" } ?: "–"),
+                "Chronotyp" to (r.msfsc?.let { clockText(it) } ?: "–"),
+                "Bilanz 7 N." to (r.balance7?.let { signedHm(it) } ?: "–"),
+                "Streuung" to (r.tstSd7?.let { "± ${Fmt.hm(it)} h" } ?: "–"),
+            ),
+            tone = { i ->
+                when {
+                    i == 0 && (r.sjlMin ?: 0.0) > 60 -> G.caution
+                    i == 2 && (r.balance7 ?: 0.0) < -120 -> G.caution
+                    else -> G.text1
+                }
+            },
+        )
+        Spacer(Modifier.height(G.s4))
+        SleepWindows(nights, selected)
+        Spacer(Modifier.height(G.s2))
+        ShareLegend(listOf(Triple("Arbeitstag", "Nacht auf Mo–Fr", G.stageLight), Triple("Frei", "Nacht auf Sa/So", G.stageRem)))
+    }
+}
+
+/** Actogram-style raster: one row per night (oldest on top), 18:00 to 12:00, sleep in colour. */
+@Composable
+private fun SleepWindows(nights: List<SleepNight>, selected: Int) {
+    val rows = remember(nights, selected) { nights.drop(selected).take(21).reversed() }
+    if (rows.isEmpty()) return
+    val measurer = rememberTextMeasurer()
+    val reveal = remember(rows) { Animatable(0f) }
+    LaunchedEffect(rows) { reveal.animateTo(1f, tween(G.T_HERO, easing = G.easeOut)) }
+    val zone = ZoneId.systemDefault()
+    Canvas(Modifier.fillMaxWidth().height((rows.size * 8 + 18).dp)) {
+        val left = 18.dp.toPx()
+        val w = size.width - left
+        val rowH = 8.dp.toPx()
+        val span = 18 * 60f
+        fun x(min: Float) = left + (min / span).coerceIn(0f, 1f) * w
+        for (h in listOf(20, 0, 4, 8)) {
+            val m = ((h - 18 + 24) % 24) * 60f
+            drawLine(G.hairline, Offset(x(m), 0f), Offset(x(m), rows.size * rowH), 1.dp.toPx())
+            val t = measurer.measure(h.toString().padStart(2, '0'), T.axis)
+            drawText(t, topLeft = Offset(x(m) - t.size.width / 2f, rows.size * rowH + 4.dp.toPx()))
+        }
+        for ((i, n) in rows.withIndex()) {
+            val wake = LocalDate.parse(n.night)
+            val free = wake.dayOfWeek.value >= 6
+            val start = wake.minusDays(1).atTime(18, 0).atZone(zone).toEpochSecond()
+            val y = i * rowH
+            val wd = measurer.measure(Fmt.weekdayLetter(n.night), T.axis)
+            drawText(wd, topLeft = Offset(0f, y + rowH / 2 - wd.size.height / 2f))
+            val color = if (free) G.stageRem else G.stageLight
+            val rowLimit = ((reveal.value * (rows.size + 6) - i) / 6f).coerceIn(0f, 1f)
+            for (iv in Rhythm.sleepIntervals(n)) {
+                val a = (iv[0] - start) / 60f
+                val b = (iv[1] - start) / 60f
+                if (b <= 0 || a >= span) continue
+                val x0 = x(a)
+                val x1 = x0 + (x(b) - x0) * rowLimit
+                drawRoundRect(color.copy(alpha = if (i == rows.lastIndex) 1f else 0.7f), Offset(x0, y + 1.5.dp.toPx()), Size(maxOf(x1 - x0, 1f), rowH - 3.dp.toPx()), CornerRadius(2.dp.toPx()))
+            }
+        }
+    }
+}

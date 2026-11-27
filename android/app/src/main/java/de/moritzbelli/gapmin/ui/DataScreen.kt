@@ -71,6 +71,7 @@ fun DataScreen(state: UiState, actions: DataActions, listState: LazyListState, b
         contentPadding = PaddingValues(start = G.s4, end = G.s4, bottom = bottomPadding),
         verticalArrangement = Arrangement.spacedBy(G.s3),
     ) {
+        item { ScreenHeader("Daten", "Lokal auf dem Gerät · zuletzt ${Fmt.dateTime(s.lastImport)}") }
         item {
             Totals(
                 listOf(

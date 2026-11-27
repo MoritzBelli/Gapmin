@@ -288,7 +288,7 @@ fun <T> BaselineOverview(
             val bx0 = labelW + gap
             val bx1 = size.width - valW - gap
             fun x(z: Double) = bx0 + ((z.coerceIn(-3.0, 3.0) + 3.0) / 6.0 * (bx1 - bx0)).toFloat()
-            val headStyle = TextStyle(fontFamily = Inter, fontSize = 9.5.sp, color = G.text3, letterSpacing = 0.8.sp)
+            val headStyle = T.label
             // band ±1 SD and zero line through the whole diagram
             drawRoundRect(G.surface3.copy(alpha = 0.55f), Offset(x(-1.0), 0f), Size(x(1.0) - x(-1.0), size.height), CornerRadius(4.dp.toPx()))
             for (t in listOf(-2.0, 2.0)) drawLine(G.hairline, Offset(x(t), 0f), Offset(x(t), size.height), 1.dp.toPx())
@@ -317,7 +317,7 @@ fun <T> BaselineOverview(
                 } else {
                     drawCircle(G.text3.copy(alpha = 0.5f), 1.5.dp.toPx(), Offset(x(0.0), cy))
                 }
-                val vs = TextStyle(fontFamily = Inter, fontSize = 11.sp, color = if (r.v == null) G.text3 else G.text1)
+                val vs = T.stat.copy(color = if (r.v == null) G.text3 else G.text1)
                 val vt = measurer.measure(
                     if (r.v == null) "–" else (r.def.fmt(r.v) + if (r.def.unitLabel.isNotEmpty()) " ${r.def.unitLabel}" else ""),
                     vs, overflow = TextOverflow.Ellipsis, softWrap = false, maxLines = 1, constraints = Constraints(maxWidth = valW.toInt()),
@@ -376,7 +376,7 @@ fun ZBar(z: Double?, color: Color, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun <T> TrendBlock(def: MetricDef<T>, items: List<T>, selected: Int, base: Baseline?, dateOf: (T) -> String, dayOf: (T) -> Long) {
+internal fun <T> TrendBlock(def: MetricDef<T>, items: List<T>, selected: Int, base: Baseline?, dateOf: (T) -> String, dayOf: (T) -> Long) {
     val window = remember(items, selected) { items.drop(selected).take(90).reversed() }
     val vals = remember(window, def) { window.map { def.get(it)?.takeIf { v -> v.isFinite() } } }
     val d = remember(vals) { Stat.desc(vals.filterNotNull()) }
@@ -436,7 +436,7 @@ private fun <T> TrendChart(def: MetricDef<T>, window: List<T>, vals: List<Double
     lo -= pad
     hi += pad
     val n = window.size
-    val axis = TextStyle(fontFamily = Inter, fontSize = 9.5.sp, color = G.text3)
+    val axis = T.axis
 
     val c = cursor
     val shown = c ?: (n - 1)
@@ -546,14 +546,17 @@ fun <T> DayStrip(
         LazyRow(
             state = state,
             reverseLayout = true,
-            modifier = Modifier.fillMaxWidth().height(84.dp),
+            modifier = Modifier.fillMaxWidth().height(72.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
             itemsIndexed(list, key = { _, it -> key(it) }) { i, it ->
                 val on = i == selected
-                val alpha by animateFloatAsState(if (on) 1f else 0.32f, tween(G.T_BASE), label = "bar")
+                val alpha by animateFloatAsState(if (on) 1f else 0.28f, tween(G.T_BASE), label = "bar")
                 val l = level(it)
+                // bars grow in from the baseline, newest first
+                val grow = remember(key(it)) { Animatable(0f) }
+                LaunchedEffect(key(it)) { kotlinx.coroutines.delay(18L * i.coerceAtMost(20)); grow.animateTo(1f, tween(G.T_SLOW, easing = G.easeOut)) }
                 Column(
                     Modifier.width(12.dp).fillMaxHeight().pressable({ onSelect(i) }, haptic = true),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -561,9 +564,9 @@ fun <T> DayStrip(
                 ) {
                     Box(
                         Modifier
-                            .width(10.dp)
-                            .fillMaxHeight(0.76f * (l ?: 0.04f).coerceIn(0.04f, 1f))
-                            .clip(RoundedCornerShape(3.dp))
+                            .width(if (on) 8.dp else 6.dp)
+                            .fillMaxHeight(0.74f * ((l ?: 0.04f).coerceIn(0.04f, 1f) * grow.value).coerceAtLeast(0.02f))
+                            .clip(RoundedCornerShape(4.dp))
                             .background((if (l == null) G.surface3 else color).copy(alpha = alpha)),
                     )
                     Spacer(Modifier.height(4.dp))
@@ -578,14 +581,14 @@ fun <T> DayStrip(
                 }
             }
         }
-        Box(Modifier.fillMaxWidth().padding(top = G.s3).height(1.dp).background(G.hairline))
+        Spacer(Modifier.height(G.s1))
     }
 }
 
 /** Compact key figures in a row (replaces the former big page titles). */
 @Composable
 fun Totals(totals: List<Triple<String, String, String>>, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth().padding(top = G.s4, bottom = G.s4), horizontalArrangement = Arrangement.spacedBy(G.s6)) {
+    Row(modifier.fillMaxWidth().padding(top = G.s1, bottom = G.s4), horizontalArrangement = Arrangement.spacedBy(G.s6)) {
         for ((l, v, u) in totals) {
             Column {
                 Label(l)

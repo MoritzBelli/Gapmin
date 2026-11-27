@@ -35,6 +35,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.moritzbelli.gapmin.core.Fmt
+import de.moritzbelli.gapmin.core.HrvGuide
+import de.moritzbelli.gapmin.core.HrvGuideDay
+import de.moritzbelli.gapmin.core.Insights
+import androidx.compose.foundation.layout.Box
+import kotlin.math.exp
 import de.moritzbelli.gapmin.core.HealthDay
 
 private val dayDate: (HealthDay) -> String = { Fmt.dayShort(it.date) }
@@ -135,12 +140,6 @@ private fun activityDefs(week: Map<Long, Double>) = listOf(
     ),
 )
 
-/** Rolling 7-day sum of weighted intensity minutes, keyed by epoch day. */
-private fun weekIntensity(days: List<HealthDay>): Map<Long, Double> {
-    val im = days.associate { it.epochDay to it.imWeighted }
-    return days.associate { x -> x.epochDay to (0L..6L).sumOf { im[x.epochDay - it] ?: 0.0 } }
-}
-
 @Composable
 internal fun HealthTrends(days: List<HealthDay>, selected: Int) {
     val defs = remember(days) {
@@ -154,6 +153,7 @@ internal fun HealthTrends(days: List<HealthDay>, selected: Int) {
 @Composable
 fun TrendsScreen(
     days: List<HealthDay>,
+    insights: Insights,
     listState: LazyListState,
     bottomPadding: Dp,
     onGoToData: () -> Unit,
@@ -161,13 +161,17 @@ fun TrendsScreen(
     // the newest day is the reference for baselines and z-scores; every row opens a 90-day chart
     val selected = 0
     val activity = remember(days) { activityDefs(weekIntensity(days)) }
+    val reveal = rememberReveal()
 
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize().statusBarsPadding(),
-        contentPadding = PaddingValues(start = G.s4, end = G.s4, top = G.s4, bottom = bottomPadding),
+        contentPadding = PaddingValues(start = G.s4, end = G.s4, bottom = bottomPadding),
         verticalArrangement = Arrangement.spacedBy(G.s3),
     ) {
+        item(key = "head") {
+            ScreenHeader("Trends", days.firstOrNull()?.let { "Stand ${Fmt.dayLong(it.date)} · ${days.size} Tage" } ?: "Noch keine Daten")
+        }
         if (days.isEmpty()) {
             item(key = "empty") {
                 Column(Modifier.fillMaxWidth().padding(vertical = G.s8), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -178,8 +182,8 @@ fun TrendsScreen(
             }
             return@LazyColumn
         }
-        item(key = "trends") { HealthTrends(days, selected) }
-        item(key = "hrv") { HrvCard(days, selected) }
+        item(key = "hrv") { Box(Modifier.reveal(reveal, "hrv", 0)) { HrvGuideCard(days, insights.hrv) } }
+        item(key = "trends") { Box(Modifier.reveal(reveal, "trends", 1)) { HealthTrends(days, selected) } }
         item(key = "metrics") {
             BaselineOverview(
                 "Kennzahlen", listOf(
@@ -203,67 +207,59 @@ internal fun Kpi(label: String, value: String, unit: String, modifier: Modifier)
     }
 }
 
-/** Nightly HRV against Garmin's personal "balanced" band, with the 7-day mean (Plews). */
+private const val HRV_GUIDE_INFO =
+    "HRV-gesteuertes Monitoring: Das 7-Tage-Mittel von ln RMSSD (Linie) wird mit dem kleinsten relevanten Unterschied verglichen, " +
+        "dem Bereich Baseline ± 0,5 SD (gestrichelt; Baseline = 60 Tage vor dem 7-Tage-Fenster, mind. 14 Nächte). Punkte: Einzelnächte.\n\n" +
+        "Unter dem Bereich spricht für unvollständige Erholung (Belastung, Infekt, Schlafmangel, Alkohol); in Studien wurde dann locker statt " +
+        "intensiv trainiert, mit gleichen oder besseren Leistungszuwächsen (Kiviniemi 2007; Vesterinen 2016; Javaloyes 2019). " +
+        "Das 7-Tage-Mittel bildet die Anpassung besser ab als Einzelnächte (Plews et al. 2012/2013; AIS-Leitfaden).\n\n" +
+        "CV: Variationskoeffizient von ln RMSSD über 7 Tage. Ein Abfall des Mittels bei steigender oder auffällig sinkender Variation kann " +
+        "auf Fehlanpassung hinweisen (Plews et al. 2012).\n\n" +
+        "Zum Vergleich der Garmin-HRV-Status (eigener, nicht offengelegter Normalbereich)."
+
+
+/** 7-day ln RMSSD against the smallest worthwhile change, the basis of HRV-guided training. */
 @Composable
-private fun HrvCard(days: List<HealthDay>, selected: Int) {
-    val window = remember(days, selected) { days.drop(selected).take(60).reversed() }
-    if (window.none { it.hrvNight != null }) return
-    val d = days[selected]
-    val measurer = rememberTextMeasurer()
-    val axis = TextStyle(fontFamily = Inter, fontSize = 9.5.sp, color = G.text3)
-    val reveal = remember(window) { Animatable(0f) }
-    LaunchedEffect(window) { reveal.animateTo(1f, tween(G.T_DRAW, easing = G.easeOut)) }
+private fun HrvGuideCard(days: List<HealthDay>, guide: List<HrvGuideDay>) {
+    val g = guide.firstOrNull { it.roll7 != null } ?: return
+    val d = days.firstOrNull { it.date == g.date }
+    val tone = when (g.status) { -1 -> G.bad; 1 -> G.caution; 0 -> G.good; else -> G.text3 }
+    val win = remember(guide) { guide.take(90).reversed() }
+    val from = win.first().epochDay
+    val to = win.last().epochDay
+    fun ms(x: Double?) = x?.let { exp(it) }
     GCard {
-        CardHead("HRV-Status", hrvStatus(d.hrvStatus), info = HRV_INFO)
-        Row(Modifier.fillMaxWidth()) {
-            Kpi("Nacht", Fmt.num(d.hrvNight), "ms", Modifier.weight(1f))
-            Kpi("7-Tage-Ø", Fmt.num(d.hrvWeekly), "ms", Modifier.weight(1f))
-            Kpi("Normalbereich", if (d.hrvLow != null && d.hrvHigh != null) "${Fmt.num(d.hrvLow)}–${Fmt.num(d.hrvHigh)}" else "–", "ms", Modifier.weight(1.3f))
+        CardHead("HRV-Steuerung", "ln RMSSD · 7 T", info = HRV_GUIDE_INFO)
+        Row(verticalAlignment = Alignment.Bottom) {
+            CountUp(ms(g.roll7), { Fmt.num(it) }, "ms", T.hero.copy(fontSize = 48.sp))
+            Spacer(Modifier.width(G.s3))
+            Column(Modifier.padding(bottom = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Dot(tone, 7.dp)
+                    Spacer(Modifier.width(6.dp))
+                    Text(HrvGuide.statusLabel(g.status), style = T.sm, color = tone)
+                }
+                Text("7-Tage-Mittel · ${Fmt.dayShort(g.date)}", style = T.stat, color = G.text3)
+            }
         }
         Spacer(Modifier.height(G.s4))
-        val vals = window.flatMap { listOfNotNull(it.hrvNight, it.hrvWeekly, it.hrvLow, it.hrvHigh) }
-        val lo = (vals.minOrNull() ?: 0.0) * 0.92
-        val hi = (vals.maxOrNull() ?: 1.0) * 1.05
-        Canvas(Modifier.fillMaxWidth().height(120.dp)) {
-            val n = window.size
-            val left = 28.dp.toPx()
-            val bottom = size.height - 14.dp.toPx()
-            fun x(i: Int) = left + (if (n > 1) i.toFloat() / (n - 1) else 0.5f) * (size.width - left)
-            fun y(v: Double) = (bottom - (v - lo) / (hi - lo) * bottom).toFloat()
-            for (k in 0..2) {
-                val v = lo + (hi - lo) * (0.15 + 0.35 * k)
-                drawLine(G.hairline, Offset(left, y(v)), Offset(size.width, y(v)), 1.dp.toPx())
-                val t = measurer.measure(Fmt.num(v), axis)
-                drawText(t, topLeft = Offset(0f, y(v) - t.size.height / 2f))
-            }
-            val limit = (n - 1) * reveal.value
-            // Garmin balanced band
-            for (i in 0 until n) {
-                val a = window[i]
-                if (a.hrvLow == null || a.hrvHigh == null || i > limit) continue
-                val x0 = x(i) - (size.width - left) / maxOf(1, n - 1) / 2
-                drawRect(G.hrvColor.copy(alpha = 0.10f), Offset(x0, y(a.hrvHigh)), Size((size.width - left) / maxOf(1, n - 1), y(a.hrvLow) - y(a.hrvHigh)))
-            }
-            // weekly mean
-            val path = Path()
-            var started = false
-            for (i in 0 until n) {
-                val v = window[i].hrvWeekly ?: continue
-                if (i > limit) break
-                if (!started) { path.moveTo(x(i), y(v)); started = true } else path.lineTo(x(i), y(v))
-            }
-            drawPath(path, G.hrvColor.copy(alpha = 0.2f), style = Stroke(5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
-            drawPath(path, G.hrvColor, style = Stroke(1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
-            // nightly values
-            for (i in 0 until n) {
-                val v = window[i].hrvNight ?: continue
-                if (i > limit) break
-                drawCircle(if (i == n - 1) G.text1 else G.text3, if (i == n - 1) 3.dp.toPx() else 1.8.dp.toPx(), Offset(x(i), y(v)))
-            }
-            val a = measurer.measure(Fmt.dayShort(window.first().date), axis)
-            drawText(a, topLeft = Offset(left, bottom + 2.dp.toPx()))
-            val b = measurer.measure(Fmt.dayShort(window.last().date), axis)
-            drawText(b, topLeft = Offset(size.width - b.size.width, bottom + 2.dp.toPx()))
-        }
+        TimeChart(
+            listOf(
+                ChartSeries("Nacht", win.mapNotNull { x -> x.ln?.let { x.epochDay to exp(it) } }, G.text2, line = false, dots = true),
+                ChartSeries("Ø7", win.mapNotNull { x -> x.roll7?.let { x.epochDay to exp(it) } }, G.hrvColor, width = 1.8.dp),
+                ChartSeries("SWC−", win.mapNotNull { x -> x.swcLo?.let { x.epochDay to exp(it) } }, G.text3, width = 0.8.dp),
+                ChartSeries("SWC+", win.mapNotNull { x -> x.swcHi?.let { x.epochDay to exp(it) } }, G.text3, width = 0.8.dp),
+            ),
+            from, to, { Fmt.num(it) }, height = 150.dp,
+        )
+        Spacer(Modifier.height(G.s3))
+        StatTable(
+            listOf(
+                "Nacht" to (ms(g.ln)?.let { "${Fmt.num(it)} ms" } ?: "–"),
+                "Normalbereich" to (if (g.swcLo != null && g.swcHi != null) "${Fmt.num(exp(g.swcLo!!))}–${Fmt.num(exp(g.swcHi!!))}" else "–"),
+                "CV 7 T" to (g.cv7?.let { "${Fmt.num(it, 1)} %" } ?: "–"),
+                "Garmin" to hrvStatus(d?.hrvStatus),
+            ),
+        )
     }
 }

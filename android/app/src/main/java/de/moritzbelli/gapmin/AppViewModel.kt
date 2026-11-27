@@ -13,6 +13,8 @@ import de.moritzbelli.gapmin.core.Health
 import de.moritzbelli.gapmin.core.HealthDay
 import de.moritzbelli.gapmin.core.GadgetbridgeImport
 import de.moritzbelli.gapmin.core.ImportProgress
+import de.moritzbelli.gapmin.core.Insights
+import de.moritzbelli.gapmin.core.RunAnalysis
 import de.moritzbelli.gapmin.core.Repo
 import de.moritzbelli.gapmin.core.SleepJob
 import de.moritzbelli.gapmin.core.RunSummary
@@ -39,6 +41,8 @@ data class UiState(
     val runs: List<RunSummary> = emptyList(),
     val nights: List<SleepNight> = emptyList(),
     val days: List<HealthDay> = emptyList(),
+    /** Training load, run analyses, HRV guidance, sleep regularity, Garmin export values (core/Insights). */
+    val insights: Insights = Insights(),
     val stats: Stats = Stats(0, 0, 0, null, null),
     val busy: ImportProgress? = null,
     val notice: Notice? = null,
@@ -58,17 +62,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             // nights from an older Garmin import have no stage timeline yet; fill it in from the stored export data
             runCatching { db.use { SleepJob.backfillGarminHypnograms(it) } }
+            // runs imported before the track analysis existed get their metrics now (once)
+            runCatching { db.use { RunAnalysis.update(it) } }
             refresh()
         }
     }
 
     private suspend fun refresh() {
         val s = db.use { sql ->
+            val nights = Repo.listNights(sql)
+            val days = Health.listDays(sql)
             UiState(
                 loaded = true,
                 runs = Repo.listRuns(sql),
-                nights = Repo.listNights(sql),
-                days = Health.listDays(sql),
+                nights = nights,
+                days = days,
+                insights = runCatching { Insights.compute(sql, days, nights) }.getOrDefault(Insights()),
                 stats = Repo.stats(sql),
                 nasUrl = Repo.getSetting(sql, "nas_url"),
                 nasToken = Repo.getSetting(sql, "nas_token"),
@@ -194,6 +203,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 GadgetbridgeImport(sql, { AndroidSql.open(it, readOnly = true) }, File(ctx.cacheDir, "import"))
                     .run(src) { p -> _state.update { it.copy(busy = p) } }
             }
+            _state.update { it.copy(busy = ImportProgress("Läufe analysieren", 0.95f)) }
+            db.use { RunAnalysis.update(it) }
             src.delete()
             refresh()
             _state.update {

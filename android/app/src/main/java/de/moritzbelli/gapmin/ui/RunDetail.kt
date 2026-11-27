@@ -49,6 +49,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import de.moritzbelli.gapmin.core.Fmt
+import de.moritzbelli.gapmin.core.HrAnchors
+import de.moritzbelli.gapmin.core.RunCategory
+import de.moritzbelli.gapmin.core.Training
+import de.moritzbelli.gapmin.core.TrainingActivity
 import de.moritzbelli.gapmin.core.RunSummary
 import de.moritzbelli.gapmin.core.TrackSample
 import kotlin.math.max
@@ -60,6 +64,7 @@ fun RunDetailPager(
     runs: List<RunSummary>,
     initialId: String,
     shared: SharedRoute?,
+    hr: HrAnchors?,
     loadTrack: (String, (List<TrackSample>) -> Unit) -> Unit,
     onPageRun: (String) -> Unit,
     onClose: () -> Unit,
@@ -71,7 +76,7 @@ fun RunDetailPager(
     }
     Box(Modifier.fillMaxSize().background(G.bg)) {
         HorizontalPager(pager, Modifier.fillMaxSize(), beyondViewportPageCount = 1, key = { runs[it].id }) { page ->
-            RunDetailPage(runs[page], shared, loadTrack, page, runs.size)
+            RunDetailPage(runs[page], shared, hr, loadTrack, page, runs.size)
         }
         // close button floats above the pages
         Box(
@@ -94,6 +99,7 @@ fun RunDetailPager(
 private fun RunDetailPage(
     run: RunSummary,
     shared: SharedRoute?,
+    hr: HrAnchors?,
     loadTrack: (String, (List<TrackSample>) -> Unit) -> Unit,
     page: Int,
     count: Int,
@@ -144,6 +150,8 @@ private fun RunDetailPage(
         )
         StatGrid(stats)
         Spacer(Modifier.height(G.s5))
+        RunAnalysisCard(run, hr)
+        Spacer(Modifier.height(G.s3))
 
         val t = track
         AnimatedVisibility(t != null && t.size > 10, enter = fadeIn(tween(G.T_SLOW))) {
@@ -152,7 +160,7 @@ private fun RunDetailPage(
                 if (series.pace.isNotEmpty()) LineChartCard("Pace", "min/km", series.dist, series.pace, color, invert = true) { Fmt.pace(it) }
                 if (series.hr.isNotEmpty()) LineChartCard("Herzfrequenz", "bpm", series.dist, series.hr, G.zone5) { it.roundToInt().toString() }
                 if (series.ele.isNotEmpty()) LineChartCard("Höhe", "m", series.dist, series.ele, G.text1.copy(alpha = 0.85f), fill = true) { it.roundToInt().toString() }
-                Text("Lange drücken und ziehen zeigt Werte an. Seitlich wischen für neuere und ältere Läufe.", style = T.sm, color = G.text3)
+                Text("Lange drücken und ziehen zeigt Werte an. Seitlich wischen für neuere und ältere Läufe.", style = T.stat, color = G.text3)
             }
         }
         Spacer(Modifier.height(G.s7))
@@ -316,4 +324,66 @@ private fun routeAspect(points: List<de.moritzbelli.gapmin.core.LatLon>): Float 
     val h = points.maxOf { it.lat } - points.minOf { it.lat }
     if (h <= 0) return 1.6f
     return (w / h).toFloat().coerceIn(1f, 1.6f)
+}
+
+private const val RUN_INFO =
+    "TRIMP: Trainingsimpuls nach Banister aus der Zeit in jeder Herzfrequenz (Minuten × HRR × 0,64·e^(1,92·HRR); Morton et al. 1990).\n\n" +
+        "EF (Efficiency Factor): Geschwindigkeit in m/min je Herzschlag nach dem Einlaufen. Entkopplung (Pa:HR): Abfall des EF von der ersten " +
+        "zur zweiten Hälfte. Unter 5 % gilt in der Trainingspraxis als gute aerobe Ausdauer für diese Dauer (Friel); Ursache des Anstiegs ist die " +
+        "kardiovaskuläre Drift (Coyle & González-Alonso 2001).\n\n" +
+        "GAP: steigungskorrigierte Pace, jede Strecke mit den Energiekosten ihrer Steigung gegenüber der Ebene gewichtet (Minetti et al. 2002).\n\n" +
+        "VO2-Schätzung: ACSM-Laufgleichung auf die GAP-Geschwindigkeit, hochgerechnet über %HRR ≈ %VO2R (Swain & Leutholtz 1997); nur gleichmäßige Läufe.\n\n" +
+        "Zonen: Zeitanteile in 10-%-Schritten der HFmax. Bestzeiten: schnellster Abschnitt der Distanz in diesem Lauf (Bewegungszeit)."
+
+/** Run-level analysis from the track: load, efficiency, drift, grade-adjusted pace, zones, splits and best efforts. */
+@Composable
+internal fun RunAnalysisCard(run: RunSummary, hr: HrAnchors?) {
+    val m = run.metrics
+    val act = remember(run) {
+        TrainingActivity(
+            id = run.id, sport = if (run.category == RunCategory.TRAIL) "trail_running" else "running", category = run.category,
+            startTs = run.startTs, epochDay = run.startTs / 86400, durationS = run.durationS, distanceM = run.distanceM,
+            avgHr = run.avgHr?.toDouble(), maxHr = run.maxHr?.toDouble(), ascentM = run.ascentM?.toDouble(), metrics = m,
+        )
+    }
+    GCard(padding = G.s4) {
+        CardHead("Analyse", if (m == null) "ohne Track" else "aus dem Track", info = RUN_INFO)
+        val cells = buildList {
+            add(Triple("TRIMP", hr?.let { Fmt.num(Training.trimp(act, it)) } ?: "–", ""))
+            add(Triple("EF", m?.ef?.let { Fmt.num(it, 2) } ?: "–", ""))
+            add(Triple("Entkopplung", m?.decoupling?.let { Fmt.num(it, 1) } ?: "–", if (m?.decoupling != null) "%" else ""))
+            add(Triple("GAP", m?.gapSPerKm?.let { Fmt.pace(it) } ?: "–", if (m?.gapSPerKm != null) "/km" else ""))
+            add(Triple("VO2-Schätzung", hr?.let { Training.vo2(act, it) }?.let { Fmt.num(it, 1) } ?: "–", ""))
+            add(Triple("Bewegt", m?.let { Fmt.duration(it.movingS) } ?: "–", ""))
+            if (run.teAnaerobic != null) add(Triple("Anaerober TE", Fmt.num(run.teAnaerobic, 1), ""))
+            if (run.recoveryH != null) add(Triple("Erholung", Fmt.num(run.recoveryH), "h"))
+        }
+        StatRows(cells, columns = 3)
+        if (m != null && hr != null && m.hrHist.isNotEmpty()) {
+            val z = Training.zones(act, hr).z5
+            val zc = listOf(G.zone1, G.zone2, G.zone3, G.zone4, G.zone5)
+            Spacer(Modifier.height(G.s4))
+            Label("Zeit in Zonen (% HFmax ${Fmt.num(hr.max)})")
+            Spacer(Modifier.height(G.s2))
+            ShareBar(z.indices.map { z[it] to zc[it] }, height = 8.dp)
+            Spacer(Modifier.height(G.s2))
+            ShareLegend(z.indices.map { Triple("Z${it + 1}", Fmt.hm(z[it] / 60), zc[it]) })
+        }
+        if (m != null && m.splits.size >= 2) {
+            Spacer(Modifier.height(G.s4))
+            Label("Splits je km")
+            Spacer(Modifier.height(G.s2))
+            // bar height = speed, so faster kilometres stand taller; the readout shows the pace
+            BarChart(
+                m.splits.map { 3600.0 / it },
+                m.splits.indices.map { "km ${it + 1}" },
+                G.runColor(run.category),
+                { Fmt.pace(3600 / it) }, height = 90.dp, unit = "/km",
+            )
+        }
+        if (m != null && m.bests.isNotEmpty()) {
+            Spacer(Modifier.height(G.s4))
+            StatTable(m.bests.toSortedMap().map { (d, s) -> Training.distanceLabel(d) to "${Fmt.duration(s)} · ${Fmt.pace(s / (d / 1000.0))}" }, columns = 2)
+        }
+    }
 }
