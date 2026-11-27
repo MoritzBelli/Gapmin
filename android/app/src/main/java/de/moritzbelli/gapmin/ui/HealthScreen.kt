@@ -77,6 +77,22 @@ private fun hrvStatus(s: Int?) = when (s) {
     else -> "–"
 }
 
+private const val HRV_INFO =
+    "Punkte: Nachtwerte. Linie: 7-Tage-Ø. Band: Garmin-Normalbereich (individuell).\n\n" +
+        "Garmin bewertet den 7-Tage-Mittelwert gegen einen persönlichen Normalbereich aus mehreren Wochen. " +
+        "Das entspricht dem Ansatz von Plews et al. (2012/2013): Das gleitende Mittel von ln RMSSD reagiert robuster auf " +
+        "Fehlanpassung an Training als Einzelnächte, Änderungen unter ~0,5 SD gelten als nicht relevant. " +
+        "„Unausgeglichen“ heißt: 7-Tage-Mittel außerhalb des Bandes; „Niedrig“: deutlich darunter."
+
+private const val HEALTH_METHOD =
+    "Tageswerte werden je Kalendertag (Ortszeit) aus den Rohdaten der Uhr gebildet. Baseline: Mittel ± SD der 28 vorherigen Tage " +
+        "mit Messung (mind. 5), HRV auf ln-Skala. z, Δ, Farben und Verlauf wie im Schlaf-Reiter.\n\n" +
+        "Tagesverlauf: Body Battery (Linie), Stress (Balken nach Garmin-Kategorie), Puls (Linie). Tippen oder Ziehen liest Werte ab.\n\n" +
+        "Stress und Body Battery sind proprietäre Firstbeat-Algorithmen ohne unabhängige Validierung; sie eignen sich für " +
+        "Verläufe innerhalb einer Person, nicht für Vergleiche zwischen Personen. Puls, Schritte und SpO2 sind direkte Messungen, " +
+        "SpO2 am Handgelenk ist bei Bewegung ungenau.\n\n" +
+        "Quellen und Schwellen: docs/research/gesundheit.md. Kein Medizinprodukt."
+
 // ---- metric definitions (references: docs/research/gesundheit.md) ------------------------------
 
 private val HEART_DEFS = listOf(
@@ -210,7 +226,6 @@ fun HealthScreen(
         item(key = "stress") { MetricGroup("Stress & Body Battery", STRESS_DEFS, days, selected, dayDate, dayIndex) }
         item(key = "activity") { MetricGroup("Aktivität", activity, days, selected, dayDate, dayIndex) }
         item(key = "breath") { MetricGroup("Atmung & Sauerstoff", BREATH_DEFS, days, selected, dayDate, dayIndex) }
-        item(key = "method") { HealthMethodCard() }
     }
 }
 
@@ -218,8 +233,13 @@ fun HealthScreen(
 private fun DayCard(d: HealthDay, today: Boolean, loadDay: (String, (DaySeries) -> Unit) -> Unit) {
     var series by remember(d.date) { mutableStateOf<DaySeries?>(null) }
     LaunchedEffect(d.date) { loadDay(d.date) { series = it } }
+    var infoOpen by remember { mutableStateOf(false) }
     GCard {
-        Label(if (today) "Heute" else Fmt.dayLong(d.date))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Label(if (today) "Heute" else Fmt.dayLong(d.date), Modifier.weight(1f))
+            InfoButton(infoOpen, { infoOpen = !infoOpen })
+        }
+        InfoPanel(infoOpen, HEALTH_METHOD)
         Spacer(Modifier.height(G.s3))
         Row(Modifier.fillMaxWidth()) {
             Kpi("Ruhepuls", Fmt.num(d.restingHr), "bpm", Modifier.weight(1f))
@@ -265,9 +285,9 @@ private fun DayChart(s: DaySeries?) {
         val hr = nearest(s.hr, t, 5 * 60)?.value
         "${Fmt.time(t)}  ·  BB ${Fmt.num(bb)}  ·  Stress ${Fmt.num(st)}  ·  Puls ${Fmt.num(hr)}"
     } else {
-        "Body Battery · Stress · Puls über 24 h"
+        ""
     }
-    Text(head, style = T.unit, color = if (cursor != null) G.text1 else G.text3, maxLines = 1, modifier = Modifier.padding(bottom = G.s2))
+    Text(head, style = T.unit, color = G.text1, maxLines = 1, modifier = Modifier.padding(bottom = G.s2).height(16.dp))
     if (s == null) {
         Box(Modifier.fillMaxWidth().height(210.dp))
         return
@@ -405,9 +425,8 @@ private fun HrvCard(days: List<HealthDay>, selected: Int) {
     val axis = TextStyle(fontFamily = Inter, fontSize = 9.5.sp, color = G.text3)
     val reveal = remember(window) { Animatable(0f) }
     LaunchedEffect(window) { reveal.animateTo(1f, tween(G.T_DRAW, easing = G.easeOut)) }
-    var open by remember { mutableStateOf(false) }
-    GCard(Modifier.pressable({ open = !open })) {
-        CardHead("HRV-Status", hrvStatus(d.hrvStatus))
+    GCard {
+        CardHead("HRV-Status", hrvStatus(d.hrvStatus), info = HRV_INFO)
         Row(Modifier.fillMaxWidth()) {
             Kpi("Nacht", Fmt.num(d.hrvNight), "ms", Modifier.weight(1f))
             Kpi("7-Tage-Ø", Fmt.num(d.hrvWeekly), "ms", Modifier.weight(1f))
@@ -457,44 +476,6 @@ private fun HrvCard(days: List<HealthDay>, selected: Int) {
             drawText(a, topLeft = Offset(left, bottom + 2.dp.toPx()))
             val b = measurer.measure(Fmt.dayShort(window.last().date), axis)
             drawText(b, topLeft = Offset(size.width - b.size.width, bottom + 2.dp.toPx()))
-        }
-        Spacer(Modifier.height(G.s2))
-        Text("Punkte: Nachtwerte · Linie: 7-Tage-Ø · Band: Garmin-Normalbereich (individuell)", style = T.unit)
-        AnimatedVisibility(open, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
-            Text(
-                "Garmin bewertet den 7-Tage-Mittelwert gegen einen persönlichen Normalbereich aus mehreren Wochen. " +
-                    "Das entspricht dem Ansatz von Plews et al. (2012/2013): Das gleitende Mittel von ln RMSSD reagiert robuster auf " +
-                    "Fehlanpassung an Training als Einzelnächte, Änderungen unter ~0,5 SD gelten als nicht relevant. " +
-                    "„Unausgeglichen“ heißt: 7-Tage-Mittel außerhalb des Bandes; „Niedrig“: deutlich darunter.",
-                style = T.unit.copy(lineHeight = 16.sp), color = G.text2, modifier = Modifier.padding(top = G.s3),
-            )
-        }
-    }
-}
-
-@Composable
-private fun HealthMethodCard() {
-    var open by remember { mutableStateOf(false) }
-    GCard(Modifier.pressable({ open = !open })) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Methodik & Grenzen", style = T.mdMedium, modifier = Modifier.weight(1f))
-            Text(if (open) "–" else "+", style = T.lg, color = G.text3)
-        }
-        AnimatedVisibility(open, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
-            Column(Modifier.padding(top = G.s3), verticalArrangement = Arrangement.spacedBy(G.s3)) {
-                Text(
-                    "Tageswerte werden je Kalendertag (Ortszeit) aus den Rohdaten der Uhr gebildet. Baseline: Mittel ± SD der 28 vorherigen Tage " +
-                        "mit Messung (mind. 5), HRV auf ln-Skala. z, Δ, Farben und Verlauf wie im Schlaf-Reiter.",
-                    style = T.sm, color = G.text2,
-                )
-                Text(
-                    "Stress und Body Battery sind proprietäre Firstbeat-Algorithmen ohne unabhängige Validierung; sie eignen sich für " +
-                        "Verläufe innerhalb einer Person, nicht für Vergleiche zwischen Personen. Puls, Schritte und SpO2 sind direkte Messungen, " +
-                        "SpO2 am Handgelenk ist bei Bewegung ungenau.",
-                    style = T.sm, color = G.text2,
-                )
-                Text("Quellen und Schwellen: docs/research/gesundheit.md. Kein Medizinprodukt.", style = T.sm, color = G.text3)
-            }
         }
     }
 }

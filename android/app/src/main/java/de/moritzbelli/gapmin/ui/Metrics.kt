@@ -143,12 +143,8 @@ fun <T> MetricGroup(
     footnote: String? = null,
 ) {
     GCard(padding = G.s4) {
-        Box(Modifier.padding(horizontal = G.s1)) { CardHead(title, trailing) }
+        Box(Modifier.padding(horizontal = G.s1)) { CardHead(title, trailing, info = footnote) }
         for ((i, d) in defs.withIndex()) MetricRow(d, items, selected, dateOf, dayOf, divider = i > 0)
-        if (footnote != null) {
-            Spacer(Modifier.height(G.s2))
-            Text(footnote, style = T.unit, modifier = Modifier.padding(horizontal = G.s1))
-        }
     }
 }
 
@@ -168,18 +164,29 @@ fun <T> MetricRow(def: MetricDef<T>, items: List<T>, selected: Int, dateOf: (T) 
         def.log -> "${Fmt.signed((v / base.center - 1) * 100)} % · z ${Fmt.signed(z, 1)}"
         else -> "${def.fmtDelta(v - base.center)} · z ${Fmt.signed(z, 1)}"
     }
-    val baseText = base?.let {
-        val spread = if (def.log) "${Fmt.num((exp(it.sd) - 1) * 100)} %" else def.fmtSpread(it.sd)
-        "Baseline ${if (def.log) "(geom.) " else ""}${def.fmt(it.center)} ± $spread · n ${it.n}"
-    } ?: def.ref?.let { "Referenz $it" } ?: ""
+    // everything that explains rather than measures sits behind the "i"
+    val info = remember(def, base) {
+        listOfNotNull(
+            def.note,
+            def.ref?.let { "Referenz: $it" },
+            base?.let {
+                val spread = if (def.log) "${Fmt.num((exp(it.sd) - 1) * 100)} %" else def.fmtSpread(it.sd)
+                "Baseline ${if (def.log) "(geom.) " else ""}${def.fmt(it.center)} ± $spread aus ${it.n} Werten (28 vorherige Tage bzw. Nächte)."
+            },
+        ).joinToString("\n\n")
+    }
+    var infoOpen by remember(def) { mutableStateOf(false) }
 
     Column(Modifier.fillMaxWidth()) {
         if (divider) Box(Modifier.fillMaxWidth().height(1.dp).background(G.hairline))
-        Column(Modifier.fillMaxWidth().pressable({ open = !open }).padding(horizontal = G.s1, vertical = G.s3)) {
+        Column(Modifier.fillMaxWidth().pressable({ open = !open }).padding(start = G.s1, end = G.s1, top = G.s3, bottom = G.s3)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Dot(def.color, 5.dp)
                 Spacer(Modifier.width(G.s2))
-                Text(def.label, style = T.sm, color = G.text1, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                    Text(def.label, style = T.sm, color = G.text1, modifier = Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (info.isNotEmpty()) InfoButton(infoOpen, { infoOpen = !infoOpen })
+                }
                 Spacer(Modifier.width(G.s2))
                 ValueUnit(def.fmt(v), def.unitLabel, T.xl.copy(fontSize = 20.sp))
             }
@@ -189,11 +196,8 @@ fun <T> MetricRow(def: MetricDef<T>, items: List<T>, selected: Int, dateOf: (T) 
                 Spacer(Modifier.width(G.s3))
                 Text(delta, style = T.unit, color = tone, maxLines = 1)
             }
-            if (baseText.isNotEmpty()) {
-                Spacer(Modifier.height(2.dp))
-                Text(baseText, style = T.unit, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
         }
+        if (info.isNotEmpty()) InfoPanel(infoOpen, info, Modifier.padding(horizontal = G.s1).padding(bottom = G.s2))
         AnimatedVisibility(open, enter = expandVertically(tween(G.T_SLOW, easing = G.easeOut)) + fadeIn(), exit = shrinkVertically() + fadeOut()) {
             TrendBlock(def, items, selected, base, dateOf, dayOf)
         }
@@ -256,14 +260,6 @@ private fun <T> TrendBlock(def: MetricDef<T>, items: List<T>, selected: Int, bas
                 }
             }
         }
-        if (def.ref != null) {
-            Spacer(Modifier.height(G.s2))
-            Text("Referenz: ${def.ref}", style = T.unit.copy(lineHeight = 16.sp), color = G.text2)
-        }
-        if (def.note != null) {
-            Spacer(Modifier.height(G.s1))
-            Text(def.note, style = T.unit.copy(lineHeight = 16.sp))
-        }
     }
 }
 
@@ -296,12 +292,11 @@ private fun <T> TrendChart(def: MetricDef<T>, window: List<T>, vals: List<Double
     val axis = TextStyle(fontFamily = Inter, fontSize = 9.5.sp, color = G.text3)
 
     val c = cursor
-    val head = if (c != null) {
-        "${dateOf(window[c])}  ·  ${def.fmt(vals[c])} ${def.unitLabel}  ·  Ø7 ${def.fmt(roll[c])}"
-    } else {
-        "Punkte: Tageswerte · Linie: Ø 7 · Band: Baseline ± 1 SD"
-    }
-    Text(head, style = T.unit, color = if (c != null) G.text1 else G.text3, maxLines = 1, modifier = Modifier.padding(bottom = G.s2))
+    val shown = c ?: (n - 1)
+    Text(
+        "${dateOf(window[shown])}  ·  ${def.fmt(vals[shown])} ${def.unitLabel}  ·  Ø7 ${def.fmt(roll[shown])}",
+        style = T.unit, color = if (c != null) G.text1 else G.text3, maxLines = 1, modifier = Modifier.padding(bottom = G.s2),
+    )
     Canvas(
         Modifier
             .fillMaxWidth()

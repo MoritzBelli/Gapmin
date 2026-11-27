@@ -1,6 +1,7 @@
 package de.moritzbelli.gapmin.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -13,16 +14,24 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
@@ -39,16 +48,46 @@ import de.moritzbelli.gapmin.core.Desc
 import de.moritzbelli.gapmin.core.Fmt
 import de.moritzbelli.gapmin.core.Stat
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
-private class Wk(val day: Double, val n: Int, val mean: Double, val sd: Double?, val from: Long, val to: Long)
+private class Bucket(val day: Double, val n: Int, val mean: Double, val sd: Double?, val min: Double, val max: Double, val from: Long, val to: Long)
+
+private val monthYear: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM yy", Locale.GERMAN)
 
 private fun dayText(epochDay: Long) = Fmt.dayShort(LocalDate.ofEpochDay(epochDay).toString())
+private fun monthText(epochDay: Long) = monthYear.format(LocalDate.ofEpochDay(epochDay)).replace("..", ".")
+
+/** Bucket key and bucket centre (epoch day) of a day: calendar weeks or calendar months. */
+private fun bucketOf(day: Long, monthly: Boolean): Pair<Long, Double> {
+    if (!monthly) {
+        val w = Math.floorDiv(day, 7L)
+        return w to w * 7 + 3.0
+    }
+    val d = LocalDate.ofEpochDay(day)
+    return (d.year * 12L + d.monthValue) to (d.withDayOfMonth(1).toEpochDay() + (d.lengthOfMonth() - 1) / 2.0)
+}
+
+private fun buckets(pts: List<Pair<Long, Double>>, monthly: Boolean): List<Bucket> =
+    pts.groupBy { bucketOf(it.first, monthly).first }.toSortedMap().map { (_, l) ->
+        val vs = l.map { it.second }
+        val m = vs.average()
+        val sd = if (vs.size >= 3) sqrt(vs.sumOf { (it - m) * (it - m) } / (vs.size - 1)) else null
+        Bucket(bucketOf(l.first().first, monthly).second, vs.size, m, sd, vs.min(), vs.max(), l.first().first, l.last().first)
+    }
+
+private val RANGES = listOf(90 to "3 M", 180 to "6 M", 365 to "1 J", 0 to "Alles")
 
 /**
- * Long-term trends of one metric: weekly means ± 1 SD with daily values and an OLS trend line,
- * the linear trend with 95 % CI, and a comparison of consecutive 30-day blocks (Cohen's d).
+ * Long-term trends of one metric, built for a narrow screen.
+ *
+ * The visible window (3 M, 6 M, 1 J or all) is aggregated so that about 15–50 marks cross the screen at any zoom:
+ * up to 3 months weekly means ± 1 SD with the daily dots, up to a year weekly means with min–max whiskers,
+ * beyond that monthly means. A minimap of the whole history below the chart shows where the window sits and moves it
+ * (tap or drag). Below: linear trend with 95 % CI and a comparison of consecutive blocks (Cohen's d).
  * Items are newest first; windows are counted back from the selected item.
  */
 @Composable
@@ -63,38 +102,57 @@ fun <T> TrendsCard(
     if (items.isEmpty() || defs.isEmpty()) return
     var idx by remember { mutableIntStateOf(0) }
     var range by remember { mutableIntStateOf(90) }
+    var endBack by remember { mutableIntStateOf(0) }
     val def = defs[idx.coerceIn(0, defs.lastIndex)]
     val ref = dayOf(items[selected.coerceIn(0, items.lastIndex)])
     val hist = remember(items, selected) { items.drop(selected) }
+    val oldest = remember(hist) { hist.minOfOrNull(dayOf) ?: ref }
+    val total = (ref - oldest).toInt() + 1
+    val win = if (range == 0) total else range
+    val maxBack = (total - win).coerceAtLeast(0)
+    val back = endBack.coerceIn(0, maxBack)
+    val winEnd = ref - back
+    val winStart = (winEnd - win + 1).coerceAtLeast(oldest)
 
-    val pts = remember(hist, def, range) {
-        hist.takeWhile { ref - dayOf(it) < range }
+    val pts = remember(hist, def, win, back) {
+        hist.filter { (ref - dayOf(it)).toInt() in back until back + win }
             .mapNotNull { x -> def.get(x)?.takeIf { it.isFinite() }?.let { dayOf(x) to it } }
             .sortedBy { it.first }
     }
-    val weeks = remember(pts) {
-        pts.groupBy { Math.floorDiv(it.first, 7L) }.toSortedMap().map { (w, l) ->
-            val vs = l.map { it.second }
-            val m = vs.average()
-            val sd = if (vs.size >= 3) sqrt(vs.sumOf { (it - m) * (it - m) } / (vs.size - 1)) else null
-            Wk(w * 7 + 3.0, vs.size, m, sd, l.first().first, l.last().first)
-        }
-    }
+    val dots = win <= 120
+    val monthly = win > 400
+    val bks = remember(pts, monthly) { buckets(pts, monthly) }
     val trend = remember(pts) { Stat.trend(pts.map { it.first.toDouble() to it.second }) }
     val desc = remember(pts) { Stat.desc(pts.map { it.second }) }
-    val blocks = remember(hist, def, range) {
-        val k = (range / 30).coerceIn(2, 12)
-        (0 until k).map { b ->
+    val nBlocks = if (win >= 120) 4 else 3
+    val blockLen = (win / nBlocks).coerceAtLeast(7)
+    val blocks = remember(hist, def, win, back) {
+        (0 until nBlocks).map { b ->
             Stat.desc(
-                hist.filter { (ref - dayOf(it)).toInt() in (b * 30) until ((b + 1) * 30) }
+                hist.filter { (ref - dayOf(it)).toInt() - back in (b * blockLen) until ((b + 1) * blockLen) }
                     .mapNotNull { def.get(it)?.takeIf { v -> v.isFinite() } },
             )
         }
     }
-    var cursor by remember(weeks) { mutableStateOf<Int?>(null) }
+    val overview = remember(hist, def) {
+        buckets(hist.mapNotNull { x -> def.get(x)?.takeIf { it.isFinite() }?.let { dayOf(x) to it } }.sortedBy { it.first }, monthly = true)
+    }
+    var cursor by remember(bks) { mutableStateOf<Int?>(null) }
+
+    val info = remember(trend, def) {
+        val sig = trend != null && abs(trend.slope) > 1.96 * trend.se
+        "Linie: Mittel je Woche (bis 1 Jahr) bzw. je Monat. Bis 3 Monate: Punkte = Tageswerte, Band = ±1 SD der Woche. " +
+            "Darüber: feine Striche = Minimum bis Maximum je Woche bzw. Monat. Gestrichelt: linearer Trend.\n\n" +
+            "Zeitfenster: Der kleine Gesamtverlauf unter dem Diagramm zeigt die ganze Historie als Monatsmittel, das helle Fenster darin den " +
+            "gezeigten Ausschnitt. Antippen oder Ziehen verschiebt ihn, „Jetzt“ springt zurück. Im Diagramm liest Tippen oder Ziehen Werte ab.\n\n" +
+            (if (trend == null) "" else
+                (if (sig) "Linearer Trend belegt: 95 %-KI schließt 0 aus. " else "Linearer Trend nicht belegt: 95 %-KI schließt 0 ein. ") +
+                    "OLS auf Tageswerten, Näherung ohne Autokorrelation.\n\n") +
+            "Blöcke: gleich lange Abschnitte rückwärts ab dem Fensterende. Δ und d (Cohen's d, gepoolte SD) gegenüber dem davor liegenden Block; ab |d| ≥ 0,5 farbig."
+    }
 
     GCard {
-        CardHead(title, "n = ${pts.size}")
+        CardHead(title, "n = ${pts.size}", info = info)
         Row(
             Modifier.fillMaxWidth().bleed(G.s5).horizontalScroll(rememberScrollState()).padding(horizontal = G.s5),
             horizontalArrangement = Arrangement.spacedBy(G.s2),
@@ -102,22 +160,33 @@ fun <T> TrendsCard(
             defs.forEachIndexed { i, d -> FilterChip(d.label, i == idx, d.color) { idx = i; cursor = null } }
         }
         Spacer(Modifier.height(G.s3))
-        Segmented(listOf(90 to "90 T", 180 to "180 T", 365 to "1 Jahr"), range, { range = it; cursor = null }, Modifier.fillMaxWidth())
+        Segmented(RANGES, range, { range = it; endBack = 0; cursor = null }, Modifier.fillMaxWidth())
         Spacer(Modifier.height(G.s4))
 
-        if (pts.size < 8 || weeks.size < 2) {
+        if (pts.size < 8 || bks.size < 2) {
             Text("Zu wenige Werte für einen Trend (mind. 8 Messungen im Zeitraum).", style = T.sm, color = G.text3, modifier = Modifier.padding(vertical = G.s4))
+            if (maxBack > 0 || back > 0) WindowNavigator(overview, oldest, ref, winStart, winEnd, def.color, back > 0, { endBack = 0 }) { c ->
+                endBack = (ref - (c + win / 2.0)).roundToInt().coerceIn(0, maxBack); cursor = null
+            }
             return@GCard
         }
 
-        val c = cursor?.let { weeks.getOrNull(it) }
-        val head = if (c != null) {
-            "${dayText(c.from)}–${dayText(c.to)} · n ${c.n} · Ø ${def.fmt(c.mean)}${c.sd?.let { " ± ${def.fmtSpread(it)}" } ?: ""} ${def.unitLabel}"
-        } else {
-            "Wochenmittel ± 1 SD · Punkte: Tage · gestrichelt: Trend"
+        val shown = cursor ?: bks.lastIndex
+        val c = bks[shown.coerceIn(0, bks.lastIndex)]
+        val span = if (monthly) monthText(c.from) else "${dayText(c.from)}–${dayText(c.to)}"
+        Text(
+            "$span · n ${c.n} · Ø ${def.fmt(c.mean)}${c.sd?.let { " ± ${def.fmtSpread(it)}" } ?: ""} ${def.unitLabel}",
+            style = T.unit, color = if (cursor != null) G.text1 else G.text3, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(bottom = G.s2),
+        )
+        TrendCanvas(def, pts, bks, trend, cursor, winStart, winEnd, dots, win > 200) { cursor = it }
+
+        if (maxBack > 0 || back > 0) {
+            Spacer(Modifier.height(G.s3))
+            WindowNavigator(overview, oldest, ref, winStart, winEnd, def.color, back > 0, { endBack = 0; cursor = null }) { center ->
+                endBack = (ref - (center + win / 2.0)).roundToInt().coerceIn(0, maxBack); cursor = null
+            }
         }
-        Text(head, style = T.unit, color = if (c != null) G.text1 else G.text3, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = G.s2))
-        TrendCanvas(def, pts, weeks, trend, cursor) { cursor = it }
 
         // key figures
         Spacer(Modifier.height(G.s3))
@@ -145,21 +214,13 @@ fun <T> TrendsCard(
                 }
             }
         }
-        if (trend != null) {
-            Spacer(Modifier.height(G.s1))
-            Text(
-                (if (sig) "Linearer Trend belegt: 95 %-KI schließt 0 aus." else "Linearer Trend nicht belegt: 95 %-KI schließt 0 ein.") +
-                    " OLS auf Tageswerten, Näherung ohne Autokorrelation.",
-                style = T.unit.copy(lineHeight = 16.sp),
-            )
-        }
 
-        // 30-day blocks
-        Spacer(Modifier.height(G.s4))
+        // consecutive blocks, newest first
+        Spacer(Modifier.height(G.s3))
         Box(Modifier.fillMaxWidth().height(1.dp).background(G.hairline))
         Spacer(Modifier.height(G.s3))
         Row(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-            Label("Block", Modifier.weight(1.0f))
+            Label("Ab", Modifier.weight(1.0f))
             Label("n", Modifier.weight(0.45f))
             Label("Ø ± SD", Modifier.weight(1.9f))
             Label("Δ davor", Modifier.weight(1.45f))
@@ -170,8 +231,9 @@ fun <T> TrendsCard(
             val prev: Desc? = blocks.getOrNull(b + 1)
             val d = if (ds != null && prev != null) Stat.cohenD(ds, prev) else null
             val delta = if (ds != null && prev != null && ds.n >= 3 && prev.n >= 3) def.fmtDelta(ds.mean - prev.mean) else "–"
+            val start = winEnd - (b + 1) * blockLen + 1
             Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
-                Text("${b * 30}–${(b + 1) * 30} T", style = cell, color = G.text2, modifier = Modifier.weight(1.0f), maxLines = 1)
+                Text(if (blockLen >= 60) monthText(start) else dayText(start), style = cell, color = G.text2, modifier = Modifier.weight(1.0f), maxLines = 1)
                 Text(ds?.n?.toString() ?: "–", style = cell, color = G.text2, modifier = Modifier.weight(0.45f), maxLines = 1)
                 Text(
                     if (ds != null && ds.n >= 3) "${def.fmt(ds.mean)} ± ${def.fmtSpread(ds.sd)}" else "–",
@@ -181,11 +243,69 @@ fun <T> TrendsCard(
                 Text(d?.let { Fmt.signed(it, 2) } ?: "–", style = cell, color = G.text2, modifier = Modifier.weight(0.55f), maxLines = 1)
             }
         }
-        Spacer(Modifier.height(G.s2))
-        Text(
-            "Blöcke zu je 30 Tagen, rückwärts ab dem gewählten Tag. d = Cohen's d (gepoolte SD) gegenüber dem davor liegenden Block; ab |d| ≥ 0,5 farbig.",
-            style = T.unit.copy(lineHeight = 16.sp),
-        )
+    }
+}
+
+/**
+ * Minimap of the whole history (monthly means). The light window marks the part shown in the chart;
+ * tap or drag moves it, "Jetzt" jumps back to the selected day.
+ */
+@Composable
+private fun WindowNavigator(
+    overview: List<Bucket>,
+    oldest: Long,
+    newest: Long,
+    from: Long,
+    to: Long,
+    color: Color,
+    showNow: Boolean,
+    onNow: () -> Unit,
+    onCenter: (Double) -> Unit,
+) {
+    val center by rememberUpdatedState(onCenter)
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Canvas(
+            Modifier
+                .weight(1f)
+                .height(34.dp)
+                .pointerInput(oldest, newest) {
+                    fun day(x: Float): Double = oldest + (x / size.width).coerceIn(0f, 1f).toDouble() * (newest - oldest).coerceAtLeast(1)
+                    detectTapGestures(onTap = { o -> center(day(o.x)) })
+                }
+                .pointerInput(oldest, newest) {
+                    fun day(x: Float): Double = oldest + (x / size.width).coerceIn(0f, 1f).toDouble() * (newest - oldest).coerceAtLeast(1)
+                    detectHorizontalDragGestures { ch, _ -> center(day(ch.position.x)) }
+                },
+        ) {
+            val span = (newest - oldest).coerceAtLeast(1).toDouble()
+            fun x(day: Double) = ((day - oldest) / span * size.width).toFloat()
+            val pad = 5.dp.toPx()
+            val lo = overview.minOfOrNull { it.mean } ?: 0.0
+            val hi = overview.maxOfOrNull { it.mean } ?: 1.0
+            fun y(v: Double) = if (hi - lo < 1e-9) size.height / 2 else (size.height - pad - (v - lo) / (hi - lo) * (size.height - 2 * pad)).toFloat()
+            // window
+            val x0 = x(from.toDouble())
+            val x1 = x(to.toDouble() + 1).coerceAtLeast(x0 + 10.dp.toPx())
+            drawRoundRect(color.copy(alpha = 0.10f), Offset(x0, 0f), Size(x1 - x0, size.height), CornerRadius(8.dp.toPx()))
+            drawRoundRect(G.hairlineStrong, Offset(x0, 0f), Size(x1 - x0, size.height), CornerRadius(8.dp.toPx()), style = Stroke(1.dp.toPx()))
+            // history
+            val path = Path()
+            overview.forEachIndexed { i, b -> if (i == 0) path.moveTo(x(b.day), y(b.mean)) else path.lineTo(x(b.day), y(b.mean)) }
+            drawPath(path, color.copy(alpha = 0.7f), style = Stroke(1.2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
+        if (showNow) {
+            Spacer(Modifier.width(G.s3))
+            Text(
+                "Jetzt",
+                style = T.unit.copy(fontSize = 11.5.sp),
+                color = G.text1,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .border(1.dp, G.hairlineStrong, CircleShape)
+                    .pressable(onNow, haptic = true)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+        }
     }
 }
 
@@ -199,14 +319,27 @@ private fun fine(def: MetricDef<*>, v: Double, signed: Boolean = true): String =
 }
 
 @Composable
-private fun TrendCanvas(def: MetricDef<*>, pts: List<Pair<Long, Double>>, weeks: List<Wk>, trend: Stat.Trend?, cursor: Int?, onCursor: (Int?) -> Unit) {
+private fun TrendCanvas(
+    def: MetricDef<*>,
+    pts: List<Pair<Long, Double>>,
+    bks: List<Bucket>,
+    trend: Stat.Trend?,
+    cursor: Int?,
+    winStart: Long,
+    winEnd: Long,
+    dots: Boolean,
+    longLabels: Boolean,
+    onCursor: (Int?) -> Unit,
+) {
     val measurer = rememberTextMeasurer()
     val axis = TextStyle(fontFamily = Inter, fontSize = 9.5.sp, color = G.text3)
-    val d0 = pts.first().first
-    val d1 = pts.last().first.let { if (it == d0) d0 + 1 else it }
+    val d0 = winStart
+    val d1 = if (winEnd <= winStart) winStart + 1 else winEnd
+    val curNow by rememberUpdatedState(cursor)
+    val setCursor by rememberUpdatedState(onCursor)
 
-    var lo = minOf(pts.minOf { it.second }, weeks.minOf { it.mean - (it.sd ?: 0.0) })
-    var hi = maxOf(pts.maxOf { it.second }, weeks.maxOf { it.mean + (it.sd ?: 0.0) })
+    var lo = minOf(pts.minOf { it.second }, bks.minOf { it.mean - (if (dots) it.sd ?: 0.0 else 0.0) })
+    var hi = maxOf(pts.maxOf { it.second }, bks.maxOf { it.mean + (if (dots) it.sd ?: 0.0 else 0.0) })
     val span0 = (hi - lo).coerceAtLeast(1e-6)
     for (r in listOfNotNull(def.refLo, def.refHi)) if (r > lo - span0 * 0.6 && r < hi + span0 * 0.6) { lo = minOf(lo, r); hi = maxOf(hi, r) }
     val pad = ((hi - lo) * 0.1).coerceAtLeast(if (def.digits > 0) 0.1 else 1.0)
@@ -219,21 +352,21 @@ private fun TrendCanvas(def: MetricDef<*>, pts: List<Pair<Long, Double>>, weeks:
         Modifier
             .fillMaxWidth()
             .height(150.dp)
-            .pointerInput(weeks) {
+            .pointerInput(bks) {
                 val left = 34.dp.toPx()
                 fun nearest(x: Float): Int {
                     val day = d0 + ((x - left) / (size.width - left - 4.dp.toPx())).coerceIn(0f, 1f) * (d1 - d0)
-                    return weeks.indices.minBy { abs(weeks[it].day - day) }
+                    return bks.indices.minBy { abs(bks[it].day - day) }
                 }
-                detectTapGestures(onTap = { o -> val i = nearest(o.x); onCursor(if (cursor == i) null else i) })
+                detectTapGestures(onTap = { o -> val i = nearest(o.x); setCursor(if (curNow == i) null else i) })
             }
-            .pointerInput(weeks) {
+            .pointerInput(bks) {
                 val left = 34.dp.toPx()
                 fun nearest(x: Float): Int {
                     val day = d0 + ((x - left) / (size.width - left - 4.dp.toPx())).coerceIn(0f, 1f) * (d1 - d0)
-                    return weeks.indices.minBy { abs(weeks[it].day - day) }
+                    return bks.indices.minBy { abs(bks[it].day - day) }
                 }
-                detectHorizontalDragGestures { ch, _ -> onCursor(nearest(ch.position.x)) }
+                detectHorizontalDragGestures { ch, _ -> setCursor(nearest(ch.position.x)) }
             },
     ) {
         val left = 34.dp.toPx()
@@ -252,16 +385,21 @@ private fun TrendCanvas(def: MetricDef<*>, pts: List<Pair<Long, Double>>, weeks:
         for (r in listOfNotNull(def.refLo, def.refHi)) {
             if (r in lo..hi) drawLine(G.text3, Offset(left, y(r)), Offset(right, y(r)), 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f, 5f)))
         }
-        // ±1 SD band of the weekly means
-        val bw = weeks.filter { it.sd != null }
-        if (bw.size >= 2) {
-            val p = Path()
-            bw.forEachIndexed { i, w -> if (i == 0) p.moveTo(x(w.day), y(w.mean + w.sd!!)) else p.lineTo(x(w.day), y(w.mean + w.sd!!)) }
-            for (w in bw.reversed()) p.lineTo(x(w.day), y(w.mean - w.sd!!))
-            p.close()
-            drawPath(p, def.color.copy(alpha = 0.10f))
+        if (dots) {
+            // ±1 SD band of the weekly means, daily values as dots
+            val bw = bks.filter { it.sd != null }
+            if (bw.size >= 2) {
+                val p = Path()
+                bw.forEachIndexed { i, w -> if (i == 0) p.moveTo(x(w.day), y(w.mean + w.sd!!)) else p.lineTo(x(w.day), y(w.mean + w.sd!!)) }
+                for (w in bw.reversed()) p.lineTo(x(w.day), y(w.mean - w.sd!!))
+                p.close()
+                drawPath(p, def.color.copy(alpha = 0.10f))
+            }
+            for ((day, v) in pts) drawCircle(G.text3.copy(alpha = 0.7f), 1.5.dp.toPx(), Offset(x(day.toDouble()), y(v)))
+        } else {
+            // long windows: min–max whisker per bucket instead of hundreds of dots
+            for (b in bks) if (b.n >= 2) drawLine(def.color.copy(alpha = 0.28f), Offset(x(b.day), y(b.max)), Offset(x(b.day), y(b.min)), 1.4.dp.toPx(), cap = StrokeCap.Round)
         }
-        for ((day, v) in pts) drawCircle(G.text3.copy(alpha = 0.7f), 1.5.dp.toPx(), Offset(x(day.toDouble()), y(v)))
         // OLS trend
         if (trend != null) {
             val ya = my + trend.slope * (d0 - mx)
@@ -272,20 +410,24 @@ private fun TrendCanvas(def: MetricDef<*>, pts: List<Pair<Long, Double>>, weeks:
             )
         }
         val line = Path()
-        weeks.forEachIndexed { i, w -> if (i == 0) line.moveTo(x(w.day), y(w.mean)) else line.lineTo(x(w.day), y(w.mean)) }
+        bks.forEachIndexed { i, w -> if (i == 0) line.moveTo(x(w.day), y(w.mean)) else line.lineTo(x(w.day), y(w.mean)) }
         drawPath(line, def.color.copy(alpha = 0.18f), style = Stroke(5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
         drawPath(line, def.color, style = Stroke(1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
-        weeks.lastOrNull()?.let {
+        bks.lastOrNull()?.let {
             drawCircle(def.color.copy(alpha = 0.25f), 6.dp.toPx(), Offset(x(it.day), y(it.mean)))
             drawCircle(def.color, 3.dp.toPx(), Offset(x(it.day), y(it.mean)))
         }
-        cursor?.let { weeks.getOrNull(it) }?.let { w ->
+        cursor?.let { bks.getOrNull(it) }?.let { w ->
             drawLine(G.hairlineStrong, Offset(x(w.day), top), Offset(x(w.day), bottom), 1.dp.toPx())
             drawCircle(G.text1, 3.dp.toPx(), Offset(x(w.day), y(w.mean)))
         }
-        val a = measurer.measure(dayText(d0), axis)
-        drawText(a, topLeft = Offset(left, bottom + 3.dp.toPx()))
-        val b = measurer.measure(dayText(pts.last().first), axis)
-        drawText(b, topLeft = Offset(right - b.size.width, bottom + 3.dp.toPx()))
+        // four date ticks, outer ones aligned to the plot edges
+        for (k in 0..3) {
+            val day = d0 + (d1 - d0) * k / 3
+            val t = measurer.measure(if (longLabels) monthText(day) else dayText(day), axis)
+            val px = x(day.toDouble())
+            val tx = when (k) { 0 -> left; 3 -> right - t.size.width; else -> px - t.size.width / 2f }
+            drawText(t, topLeft = Offset(tx, bottom + 3.dp.toPx()))
+        }
     }
 }

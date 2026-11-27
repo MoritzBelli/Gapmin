@@ -277,6 +277,20 @@ private fun partInput(key: String, n: SleepNight): String {
     }
 }
 
+private const val SLEEP_METHOD =
+    "Baseline: Mittel ± SD deiner 28 vorherigen Nächte (mind. 5). z = (Wert − Mittel) / SD. Der Balken zeigt z von −3 bis +3, " +
+        "hell hinterlegt ±1 SD, Striche bei ±2 SD. Grün/Rot: besser/schlechter in Richtung der Evidenz (ab |z| 0,5); " +
+        "Orange: auffällige Abweichung ohne Richtung (|z| ≥ 1,5).\n\n" +
+        "Antippen einer Zeile zeigt den Verlauf der letzten 90 Nächte (Punkte: Einzelwerte, Linie: gleitendes Mittel über 7, " +
+        "Band: Baseline, gestrichelt: Literaturgrenzen) sowie n, Median, IQR, Spannweite, SD, Variationskoeffizient " +
+        "und den linearen Trend (OLS, pro 30 Tage) mit Korrelation r zur Zeit. Antippen oder Ziehen im Diagramm liest Einzelwerte ab.\n\n" +
+        "Gewichte: Dauer, Kontinuität und autonome Erholung je 25 %, Architektur und Regelmäßigkeit je 10 %, Atmung 5 %. " +
+        "Kein Medizinprodukt, keine Diagnose. Volle Begründung und Quellen: docs/research/schlaf-score.md."
+
+private const val STAGE_INFO =
+    "Phasen aus einem Handgelenk-Algorithmus (Garmin vs. PSG: 50 % Übereinstimmung, κ = 0,25; Miller 2022). " +
+        "Einzelnächte schwanken, Trends sind aussagekräftiger."
+
 @Composable
 fun SleepScreen(
     nights: List<SleepNight>,
@@ -319,7 +333,6 @@ fun SleepScreen(
             )
         }
         item(key = "breathing") { MetricGroup("Atmung & Sauerstoff", BREATHING_DEFS, nights, selected, nightDate, nightDay) }
-        item(key = "method") { MethodCard() }
     }
 }
 
@@ -339,17 +352,31 @@ private fun ScoreCard(nights: List<SleepNight>, selected: Int) {
         Triple(pairs.size, Stat.pearson(pairs), Stat.blandAltman(pairs))
     }
 
+    var infoOpen by remember { mutableStateOf(false) }
+    val (pairs, r, ba) = agree
+    val info = remember(pairs, r, ba) {
+        buildString {
+            append(SLEEP_METHOD)
+            if (r != null && ba != null) {
+                append("\n\nGSS vs. Garmin (n = $pairs): r = ${Fmt.num(r, 2)} · Bias ${Fmt.signed(ba.first, 1)} ± ${Fmt.num(ba.second, 1)} (Bland-Altman, 1 SD)")
+            }
+        }
+    }
     GCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             ScoreRing(n.score, color, Modifier.size(116.dp))
             Spacer(Modifier.width(G.s5))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
-                Label(if (selected == 0) "Letzte Nacht" else Fmt.dayShort(n.night))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Label(if (selected == 0) "Letzte Nacht" else Fmt.dayShort(n.night), Modifier.weight(1f))
+                    InfoButton(infoOpen, { infoOpen = !infoOpen })
+                }
                 Text(n.label, style = T.lg.copy(fontSize = 24.sp), color = color)
                 Text("${Fmt.time(n.onsetTs)} – ${Fmt.time(n.wakeTs)} · ${Fmt.hm(n.tstMin)} h", style = T.sm, color = G.text2)
                 if (n.garminScore != null) Text("Garmin ${n.garminScore}", style = T.sm, color = G.text3)
             }
         }
+        InfoPanel(infoOpen, info)
         Spacer(Modifier.height(G.s4))
         Row(Modifier.fillMaxWidth()) {
             StatCell("Ø 7 N.", d7?.let { Fmt.num(it.mean) } ?: "–", d7?.let { "± ${Fmt.num(it.sd, 1)}" } ?: "", Modifier.weight(1f))
@@ -368,14 +395,6 @@ private fun ScoreCard(nights: List<SleepNight>, selected: Int) {
         }
         Spacer(Modifier.height(G.s3))
         for (d in SCORE_DEFS) MetricRow(d, nights, selected, nightDate, nightDay, divider = true)
-        val (pairs, r, ba) = agree
-        if (r != null && ba != null) {
-            Spacer(Modifier.height(G.s2))
-            Text(
-                "GSS vs. Garmin (n = $pairs): r = ${Fmt.num(r, 2)} · Bias ${Fmt.signed(ba.first, 1)} ± ${Fmt.num(ba.second, 1)} (Bland-Altman, 1 SD)",
-                style = T.unit,
-            )
-        }
         if (n.provisional) {
             Spacer(Modifier.height(G.s2))
             Text("Vorläufig: Die persönliche Baseline braucht 7 Nächte (bisher ${n.baselineNights}).", style = T.sm, color = G.text3)
@@ -397,7 +416,7 @@ private fun HypnoCard(nights: List<SleepNight>, selected: Int) {
     val n = nights[selected]
     val prev = remember(nights, selected) { nights.drop(selected + 1).take(28) }
     GCard {
-        CardHead("Hypnogramm", "${Fmt.time(n.bedTs)} – ${Fmt.time(n.outTs)}")
+        CardHead("Hypnogramm", "${Fmt.time(n.bedTs)} – ${Fmt.time(n.outTs)}", info = STAGE_INFO)
         if (n.hypnogram.isEmpty()) {
             Text("Für diese Nacht liegt nur die Summe der Phasen vor (Garmin-Export), kein Verlauf.", style = T.unit, color = G.text3)
         } else {
@@ -445,11 +464,6 @@ private fun HypnoCard(nights: List<SleepNight>, selected: Int) {
                 Text(ref, style = T.sm, color = G.text3, modifier = Modifier.weight(1f))
             }
         }
-        Spacer(Modifier.height(G.s2))
-        Text(
-            "Phasen aus einem Handgelenk-Algorithmus (Garmin vs. PSG: 50 % Übereinstimmung, κ = 0,25; Miller 2022). Einzelnächte schwanken, Trends sind aussagekräftiger.",
-            style = T.unit.copy(lineHeight = 16.sp),
-        )
     }
 }
 
@@ -518,38 +532,6 @@ private fun ComponentRow(c: Component, v: Double?, parts: List<Sleep.PartScore>,
                 Text(info.formula, style = T.unit.copy(lineHeight = 16.sp), color = G.text2)
                 Spacer(Modifier.height(G.s1))
                 Text("Quelle: ${info.source}", style = T.unit.copy(lineHeight = 16.sp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun MethodCard() {
-    var open by remember { mutableStateOf(false) }
-    GCard(Modifier.pressable({ open = !open })) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Methodik & Lesehilfe", style = T.mdMedium, modifier = Modifier.weight(1f))
-            Text(if (open) "–" else "+", style = T.lg, color = G.text3)
-        }
-        AnimatedVisibility(open, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
-            Column(Modifier.padding(top = G.s3), verticalArrangement = Arrangement.spacedBy(G.s3)) {
-                Text(
-                    "Baseline: Mittel ± SD deiner 28 vorherigen Nächte (mind. 5). z = (Wert − Mittel) / SD. Der Balken zeigt z von −3 bis +3, " +
-                        "hell hinterlegt ±1 SD, Striche bei ±2 SD. Grün/Rot: besser/schlechter in Richtung der Evidenz (ab |z| 0,5); " +
-                        "Orange: auffällige Abweichung ohne Richtung (|z| ≥ 1,5).",
-                    style = T.sm, color = G.text2,
-                )
-                Text(
-                    "Antippen einer Zeile zeigt den Verlauf der letzten 90 Nächte (Punkte: Einzelwerte, Linie: gleitendes Mittel über 7, " +
-                        "Band: Baseline, gestrichelt: Literaturgrenzen) sowie n, Median, IQR, Spannweite, SD, Variationskoeffizient " +
-                        "und den linearen Trend (OLS, pro 30 Tage) mit Korrelation r zur Zeit. Antippen oder Ziehen im Diagramm liest Einzelwerte ab.",
-                    style = T.sm, color = G.text2,
-                )
-                Text(
-                    "Gewichte: Dauer, Kontinuität und autonome Erholung je 25 %, Architektur und Regelmäßigkeit je 10 %, Atmung 5 %. " +
-                        "Kein Medizinprodukt, keine Diagnose. Volle Begründung und Quellen: docs/research/schlaf-score.md.",
-                    style = T.sm, color = G.text3,
-                )
             }
         }
     }

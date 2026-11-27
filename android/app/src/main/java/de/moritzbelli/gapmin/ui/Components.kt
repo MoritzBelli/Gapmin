@@ -1,9 +1,14 @@
 package de.moritzbelli.gapmin.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,7 +31,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -105,20 +112,67 @@ fun GCard(modifier: Modifier = Modifier, padding: Dp = G.s5, content: @Composabl
     )
 }
 
+/**
+ * Card title with optional meta text. `info` puts a small "i" on the right; the explanation stays hidden until it is tapped.
+ * Explanations never sit permanently on a card: the data is the content (DESIGN.md).
+ */
 @Composable
-fun CardHead(title: String, trailing: String? = null) {
-    if (trailing != null && trailing.length > 12) {
-        // long meta (e.g. "zuletzt 26. Nov. 2026, 19:32") goes below the title on phones
-        Column(Modifier.fillMaxWidth().padding(bottom = G.s4)) {
-            Text(title, style = T.mdMedium, maxLines = 1)
+fun CardHead(title: String, trailing: String? = null, info: String? = null) {
+    var open by remember { mutableStateOf(false) }
+    // long meta (e.g. "zuletzt 26. Nov. 2026, 19:32") goes below the title on phones
+    val long = trailing != null && trailing.length > 12
+    Column(Modifier.fillMaxWidth().padding(bottom = G.s4)) {
+        Row(verticalAlignment = if (info != null) Alignment.CenterVertically else Alignment.Bottom) {
+            Text(title, style = T.mdMedium, modifier = Modifier.weight(1f), maxLines = 1)
+            if (trailing != null && !long) Label(trailing)
+            if (info != null) {
+                if (trailing != null && !long) Spacer(Modifier.width(G.s1))
+                InfoButton(open, { open = !open })
+            }
+        }
+        if (long && trailing != null) {
             Spacer(Modifier.height(2.dp))
             Label(trailing)
         }
-        return
+        if (info != null) InfoPanel(open, info)
     }
-    Row(Modifier.fillMaxWidth().padding(bottom = G.s4), verticalAlignment = Alignment.Bottom) {
-        Text(title, style = T.mdMedium, modifier = Modifier.weight(1f), maxLines = 1)
-        if (trailing != null) Label(trailing)
+}
+
+/** Small "i" (32 dp touch target, 18 dp drawn). Quiet when closed, filled when open. */
+@Composable
+fun InfoButton(open: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+    val fg by animateColorAsState(if (open) G.text1 else G.text3, tween(G.T_BASE), label = "infoFg")
+    val bg by animateColorAsState(if (open) G.surface3 else Color.Transparent, tween(G.T_BASE), label = "infoBg")
+    Box(modifier.size(32.dp).pressable(onToggle, haptic = true), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(18.dp).clip(CircleShape).background(bg).border(1.dp, if (open) Color.Transparent else G.hairlineStrong, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("i", style = T.label.copy(fontSize = 10.5.sp, letterSpacing = 0.sp, lineHeight = 12.sp), color = fg)
+        }
+    }
+}
+
+/** Explanation revealed by an [InfoButton]; paragraphs are separated by a blank line. */
+@Composable
+fun InfoPanel(open: Boolean, text: String, modifier: Modifier = Modifier) {
+    AnimatedVisibility(
+        open,
+        enter = expandVertically(tween(G.T_SLOW, easing = G.easeOut)) + fadeIn(tween(G.T_BASE)),
+        exit = shrinkVertically(tween(G.T_BASE, easing = G.easeOut)) + fadeOut(tween(G.T_FAST)),
+    ) {
+        Column(modifier.fillMaxWidth().padding(top = G.s2)) {
+            Text(
+                text,
+                style = T.unit.copy(lineHeight = 17.sp),
+                color = G.text2,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(G.rSm))
+                    .background(G.surface2)
+                    .padding(horizontal = G.s3, vertical = G.s3),
+            )
+        }
     }
 }
 

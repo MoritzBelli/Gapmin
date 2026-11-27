@@ -11,7 +11,8 @@ Alle Werte stehen in der App in [`ui/Theme.kt`](../android/app/src/main/java/de/
 4. **Große Zahlen, leichte Schrift.** Kennzahlen sind das Gestaltungselement: groß, `--fw-light`, tabellarische Ziffern, Einheit klein und gedimmt.
 5. **Bewegung erklärt.** Animation zeigt, woher etwas kommt (Kachel → Detail), nie Dekoration. Weich, kurz, abschaltbar (`prefers-reduced-motion`).
 6. **Eine Ebene tief.** Bereiche oben (mobil unten), Inhalt, Detail als Overlay. Kein Menü im Menü. Alles per Tastatur bedienbar.
-7. **Maximale Auswertung, minimale Fläche.** Jede Ansicht zeigt eine Hauptzahl und darunter verdichtete Nebenwerte. Mehr Tiefe kommt durch Antippen, nicht durch mehr Elemente.
+7. **Erklärungen nur auf Wunsch.** Auf den Karten stehen Daten, keine Legenden, Methodik oder Fußnoten. Alles, was erklärt statt misst, liegt hinter einem „i“ (`InfoButton`/`InfoPanel`, `CardHead(info = …)`) und klappt erst beim Antippen auf.
+8. **Maximale Auswertung, minimale Fläche.** Jede Ansicht zeigt eine Hauptzahl und darunter verdichtete Nebenwerte. Mehr Tiefe kommt durch Antippen, nicht durch mehr Elemente.
 
 ## Farben
 
@@ -76,8 +77,9 @@ Zahlen: Klasse `.num` (leicht, enge Laufweite), Einheit als `<span class="unit">
 - **Detail-Overlay**: Visual links, Zahlen rechts; mobil als Bottom-Sheet. Esc schließt, ← → blättert.
 - **Keine Seitentitel.** Der aktive Bereich steht in der Navigation. Oben stehen höchstens Summen (`Totals`) oder der Tag-/Nacht-Wähler.
 - **Navigation**: Läufe, Schlaf, Health, Daten.
-- **Messwert-Zeile** (`MetricRow`, `ui/Metrics.kt`): Name, Wert mit Einheit, z-Balken (−3 bis +3 SD, ±1 SD hell), Δ und z zur Baseline (28 vorherige Werte), Baseline-Mittel ± SD und n. Antippen klappt Verlauf (90 Werte) und Statistik auf (n, Median, IQR, Min–Max, SD, CV, OLS-Trend, r). Methodik: `docs/research/gesundheit.md`.
-- **Langzeittrends** (`TrendsCard`, `ui/Trends.kt`): Messgröße per Chip, Zeitraum per Segmented Control; Wochenmittel mit SD-Band, Tagespunkte, gestrichelter Trend, Kennzahlen mit 95 %-KI und 30-Tage-Blockvergleich (Δ, Cohen's d).
+- **Info-Button** (`InfoButton`, `InfoPanel`, `ui/Components.kt`): 18-px-„i“ mit 32-px-Touchfläche rechts im Kartenkopf oder neben dem Namen einer Messwert-Zeile. Offen: gefüllt, darunter eine Fläche (`surface-2`) mit dem Erklärtext. Nie mehr als ein Absatz je Thema, Absätze durch Leerzeile getrennt.
+- **Messwert-Zeile** (`MetricRow`, `ui/Metrics.kt`): Name, Wert mit Einheit, z-Balken (−3 bis +3 SD, ±1 SD hell), Δ und z zur Baseline (28 vorherige Werte). Baseline-Mittel ± SD, Referenzwerte und Hinweise stehen hinter dem „i“. Antippen der Zeile klappt Verlauf (90 Werte) und Statistik auf (n, Median, IQR, Min–Max, SD, CV, OLS-Trend, r). Methodik: `docs/research/gesundheit.md`.
+- **Langzeittrends** (`TrendsCard`, `ui/Trends.kt`): Messgröße per Chip, Zeitraum per Segmented Control (3 M, 6 M, 1 J, Alles). Das Diagramm aggregiert je nach Fensterlänge, damit auf dem Handy nie mehr als etwa 15–50 Marken nebeneinander stehen: bis 3 Monate Wochenmittel mit ±1-SD-Band und Tagespunkten, bis 1 Jahr Wochenmittel mit Min–Max-Strichen, darüber Monatsmittel. Vier Datumsmarken auf der Zeitachse, Tippen/Ziehen liest den Wert des Abschnitts ab (ohne Berührung: der neueste). Unter dem Diagramm zeigt die **Minimap** (`WindowNavigator`) die ganze Historie als Monatsmittel und das Fenster darin; Tippen oder Ziehen verschiebt das Fenster, „Jetzt“ springt zurück. Darunter Kennzahlen mit 95 %-KI und ein Blockvergleich (höchstens 4 Blöcke, Δ, Cohen's d) ab Fensterende.
 - **Tageswähler** (`DayStrip`): Balken pro Tag/Nacht, neuester rechts.
 
 ## Datenvisualisierung (für kommende Ansichten)
@@ -87,4 +89,4 @@ Zahlen: Klasse `.num` (leicht, enge Laufweite), Einheit als `<span class="unit">
 - Hover/Touch: Fadenkreuz + Werte-Tooltip, alle Reihen am gleichen Zeitpunkt.
 - Baselines (z. B. HRV-Normalbereich) als gedimmtes Band hinter der Linie.
 - Trends immer mit Bezug: Wert, Differenz zur Baseline (`--good`/`--bad`), Zeitraum.
-- Langzeitverläufe: gleitender Mittelwert als Hauptlinie, Tageswerte als Punkte in `--text-3`.
+- Langzeitverläufe: gleitender bzw. Wochen-/Monatsmittel als Hauptlinie, Tageswerte als Punkte in `--text-3` nur bei kurzen Fenstern (≤ 120 Tage), sonst Min–Max-Striche je Abschnitt. Immer mit Minimap, sobald die Historie länger ist als das Fenster.
