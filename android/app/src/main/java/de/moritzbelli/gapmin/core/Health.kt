@@ -47,7 +47,8 @@ object Health {
         fun put(d: String, k: String, x: Double?) { acc.getOrPut(d) { Acc() }.v[k] = x }
 
         db.forEach(
-            """SELECT $LOCAL_DAY d, AVG(hr), MIN(hr), MAX(hr), COUNT(hr), SUM(steps), SUM(active_kcal)
+            """SELECT $LOCAL_DAY d, AVG(hr), MIN(hr), MAX(hr), COUNT(hr),
+                      SUM(CASE WHEN steps BETWEEN 0 AND 400 THEN steps END), SUM(CASE WHEN active_kcal BETWEEN 0 AND 100 THEN active_kcal END)
                FROM minute_samples WHERE ts >= ? GROUP BY d""",
             listOf(from),
         ) { r ->
@@ -121,7 +122,9 @@ object Health {
             val j = Json.parse(r[1].str()).asMap() ?: return@forEach
             val a = acc.getOrPut(d) { Acc() }.v
             fun fill(k: String, x: Double?) { if (x != null && a[k] == null) a[k] = x }
-            fill("steps", j["totalSteps"].asDouble()); fill("kcal", j["activeKilocalories"].asDouble())
+            // Gadgetbridge minute data has gaps (and -1 markers), so the export's day total is a lower bound too: keep the larger
+            fun atLeast(k: String, x: Double?) { if (x != null && x > 0 && (a[k] == null || x > a[k]!!)) a[k] = x }
+            atLeast("steps", j["totalSteps"].asDouble()); atLeast("kcal", j["activeKilocalories"].asDouble())
             fill("imMod", j["moderateIntensityMinutes"].asDouble()); fill("imVig", j["vigorousIntensityMinutes"].asDouble())
             fill("hrMin", j["minHeartRate"].asDouble()); fill("hrMax", j["maxHeartRate"].asDouble())
             fill("rhr", (j["restingHeartRate"] ?: j["currentDayRestingHeartRate"]).asDouble())
