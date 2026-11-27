@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS hrv_summary (
 ) WITHOUT ROWID;
 
 -- Daily records that have no time series behind them, e.g. from a Garmin Connect data export
--- (kind: garmin_uds | garmin_sleep | garmin_readiness | garmin_health | garmin_load | ...; data = raw JSON of that day)
+-- (kind: garmin_uds | garmin_sleep | garmin_readiness | garmin_health | garmin_load | ... - data is the raw JSON of that day)
 CREATE TABLE IF NOT EXISTS daily_summary (
   date TEXT NOT NULL,                 -- local calendar date YYYY-MM-DD
   kind TEXT NOT NULL,
