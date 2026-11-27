@@ -53,8 +53,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import de.moritzbelli.gapmin.Notice
 import de.moritzbelli.gapmin.UiState
@@ -64,11 +62,13 @@ import de.moritzbelli.gapmin.core.TrackSample
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-enum class Tab(val label: String, val icon: ImageVector) {
+/** `compact` tabs show only their icon (data management is not a daily destination). */
+enum class Tab(val label: String, val icon: ImageVector, val compact: Boolean = false) {
+    TODAY("Heute", GIcons.Sun),
     RUNS("Läufe", GIcons.Run),
     SLEEP("Schlaf", GIcons.Moon),
-    HEALTH("Health", GIcons.Heart),
-    DATA("Daten", GIcons.Data),
+    TRENDS("Trends", GIcons.Trend),
+    DATA("Daten", GIcons.Data, compact = true),
 }
 
 @Composable
@@ -81,16 +81,17 @@ fun GapminApp(
     initialTab: Tab? = null,
     initialRun: String? = null,
 ) {
-    var tab by rememberSaveable { mutableStateOf(initialTab ?: Tab.RUNS) }
+    var tab by rememberSaveable { mutableStateOf(initialTab ?: Tab.TODAY) }
     var openRun by rememberSaveable { mutableStateOf(initialRun) }
     var filter by rememberSaveable { mutableStateOf<RunCategory?>(null) }
     var sort by rememberSaveable { mutableStateOf(RunSort.DATE) }
     var night by rememberSaveable { mutableIntStateOf(0) }
     var day by rememberSaveable { mutableIntStateOf(0) }
     var routedEmpty by rememberSaveable { mutableStateOf(false) }
+    val todayList = rememberLazyListState()
     val runsList = rememberLazyListState()
     val sleepList = rememberLazyListState()
-    val healthList = rememberLazyListState()
+    val trendsList = rememberLazyListState()
     val dataList = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
@@ -107,7 +108,7 @@ fun GapminApp(
     val visible = remember(state.runs, filter, sort) { visibleRuns(state.runs, filter, sort) }
 
     BackHandler(openRun != null) { openRun = null }
-    BackHandler(openRun == null && tab != Tab.RUNS) { tab = Tab.RUNS }
+    BackHandler(openRun == null && tab != Tab.TODAY) { tab = Tab.TODAY }
 
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val bottomPad = navInset + 104.dp
@@ -140,6 +141,13 @@ fun GapminApp(
                             label = "tab",
                         ) { t ->
                             when (t) {
+                                Tab.TODAY -> TodayScreen(
+                                    state.days, state.nights, state.runs, day, { day = it }, loadDay, todayList, bottomPad,
+                                    onOpenSleep = { tab = Tab.SLEEP },
+                                    // the run may be hidden by an active filter on the runs tab, so show everything
+                                    onOpenRun = { filter = null; openRun = it.id },
+                                    onGoToData = { tab = Tab.DATA },
+                                )
                                 Tab.RUNS -> RunsScreen(
                                     state.runs, visible, filter, sort, runsList, bottomPad, shared,
                                     onFilter = { filter = it },
@@ -148,7 +156,7 @@ fun GapminApp(
                                     onGoToData = { tab = Tab.DATA },
                                 )
                                 Tab.SLEEP -> SleepScreen(state.nights, night, { night = it }, sleepList, bottomPad, onGoToData = { tab = Tab.DATA })
-                                Tab.HEALTH -> HealthScreen(state.days, day, { day = it }, loadDay, healthList, bottomPad, onGoToData = { tab = Tab.DATA })
+                                Tab.TRENDS -> TrendsScreen(state.days, trendsList, bottomPad, onGoToData = { tab = Tab.DATA })
                                 Tab.DATA -> DataScreen(state, actions, dataList, bottomPad)
                             }
                         }
@@ -166,9 +174,10 @@ fun GapminApp(
                                     // tapping the active tab scrolls to the top, like native apps
                                     scope.launch {
                                         when (t) {
+                                            Tab.TODAY -> todayList.animateScrollToItem(0)
                                             Tab.RUNS -> runsList.animateScrollToItem(0)
                                             Tab.SLEEP -> sleepList.animateScrollToItem(0)
-                                            Tab.HEALTH -> healthList.animateScrollToItem(0)
+                                            Tab.TRENDS -> trendsList.animateScrollToItem(0)
                                             Tab.DATA -> dataList.animateScrollToItem(0)
                                         }
                                     }
@@ -197,12 +206,12 @@ private fun NavPill(tab: Tab, onSelect: (Tab) -> Unit, busy: Boolean, modifier: 
             .padding(top = G.s6, bottom = G.s3),
         contentAlignment = Alignment.Center,
     ) {
-        var itemW by remember { mutableIntStateOf(0) }
-        val density = LocalDensity.current
+        // labelled tabs share one width; the icon-only data tab is narrower, so the indicator animates offset and width
         val indicatorX by animateDpAsState(
-            with(density) { (itemW * tab.ordinal).toDp() },
+            Tab.entries.take(tab.ordinal).fold(0.dp) { acc, t -> acc + t.slot },
             tween(G.T_SLOW, easing = G.easeOut), label = "indicator",
         )
+        val indicatorW by animateDpAsState(tab.slot, tween(G.T_SLOW, easing = G.easeOut), label = "indicatorW")
         Box(
             Modifier
                 .clip(CircleShape)
@@ -211,10 +220,10 @@ private fun NavPill(tab: Tab, onSelect: (Tab) -> Unit, busy: Boolean, modifier: 
                 .padding(4.dp),
         ) {
             // sliding selection indicator
-            if (itemW > 0) Box(
+            Box(
                 Modifier
                     .offset(x = indicatorX)
-                    .width(with(density) { itemW.toDp() })
+                    .width(indicatorW)
                     .height(48.dp)
                     .clip(CircleShape)
                     .background(G.surface3),
@@ -224,17 +233,21 @@ private fun NavPill(tab: Tab, onSelect: (Tab) -> Unit, busy: Boolean, modifier: 
                     val on = t == tab
                     Row(
                         Modifier
-                            .width(84.dp)
+                            .width(t.slot)
                             .height(48.dp)
-                            .onSizeChanged { itemW = it.width }
                             .clip(CircleShape)
                             .pressable({ onSelect(t) }, haptic = true),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
                     ) {
-                        Icon(t.icon, null, tint = if (on) G.accent else G.text3, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(5.dp))
-                        Text(t.label, style = T.sm, color = if (on) G.text1 else G.text2)
+                        Icon(
+                            t.icon, t.label, tint = if (on) G.accent else G.text3,
+                            modifier = Modifier.size(if (t.compact) 18.dp else 16.dp),
+                        )
+                        if (!t.compact) {
+                            Spacer(Modifier.width(5.dp))
+                            Text(t.label, style = T.sm, color = if (on) G.text1 else G.text2, maxLines = 1)
+                        }
                         if (t == Tab.DATA && busy) {
                             Spacer(Modifier.width(4.dp))
                             Dot(G.accent, 5.dp)
@@ -245,6 +258,8 @@ private fun NavPill(tab: Tab, onSelect: (Tab) -> Unit, busy: Boolean, modifier: 
         }
     }
 }
+
+private val Tab.slot get() = if (compact) 44.dp else 72.dp
 
 @Composable
 private fun NoticeBanner(notice: Notice?, busyStep: String?, onDismiss: () -> Unit, modifier: Modifier) {

@@ -591,7 +591,7 @@ private fun StripBar(n: SleepNight, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ScoreRing(score: Int, color: Color, modifier: Modifier) {
+internal fun ScoreRing(score: Int, color: Color, modifier: Modifier) {
     val sweep = remember { Animatable(0f) }
     LaunchedEffect(score) { sweep.animateTo(score / 100f, tween(G.T_DRAW, easing = G.easeOut)) }
     Box(modifier, contentAlignment = Alignment.Center) {

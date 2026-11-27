@@ -59,10 +59,11 @@ class ScreenshotTest {
         File(out, "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
+    @Test fun today() = shot("0-heute", Tab.TODAY)
     @Test fun runs() = shot("1-laeufe", Tab.RUNS)
     @Test fun detail() = shot("2-lauf-detail", Tab.RUNS, state.runs.first().id)
     @Test fun sleep() = shot("3-schlaf", Tab.SLEEP)
-    @Test fun health() = shot("4-health", Tab.HEALTH)
+    @Test fun trends() = shot("4-trends", Tab.TRENDS)
     @Test fun trendsSleep() = render("6-trends-schlaf") {
         androidx.compose.foundation.layout.Box(
             androidx.compose.ui.Modifier.fillMaxSize().background(G.bg).padding(16.dp),
