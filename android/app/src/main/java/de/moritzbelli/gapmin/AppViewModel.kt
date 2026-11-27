@@ -20,6 +20,7 @@ import de.moritzbelli.gapmin.core.Stats
 import de.moritzbelli.gapmin.core.TrackSample
 import de.moritzbelli.gapmin.data.AndroidSql
 import de.moritzbelli.gapmin.data.AppDatabase
+import de.moritzbelli.gapmin.data.GadgetbridgeLink
 import de.moritzbelli.gapmin.data.NasSync
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -116,14 +117,52 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Called when the app comes to the foreground: re-import the remembered export if Gadgetbridge rewrote it. */
     fun checkWatchedExport() {
         if (_state.value.busy != null) return
+        viewModelScope.launch { importWatchedExport(force = false) }
+    }
+
+    /** Liest die gemerkte Exportdatei ein; ohne `force` nur, wenn sie seit dem letzten Import neu geschrieben wurde. */
+    private suspend fun importWatchedExport(force: Boolean): Boolean {
+        val (uriStr, known) = db.use { Repo.getSetting(it, "export_uri") to (Repo.getSetting(it, "export_modified").toLongOrNull() ?: 0L) }
+        if (uriStr.isEmpty()) return false
+        val uri = Uri.parse(uriStr)
+        val modified = lastModified(uri) ?: if (force) 0L else return false
+        if (!force && modified <= known) return false
+        val ok = runImport(quietStart = true) { dst -> copyUri(uri, dst) }
+        if (ok) db.use { Repo.setSetting(it, "export_modified", modified.toString()) }
+        return ok
+    }
+
+    /**
+     * Uhr synchronisieren → Gadgetbridge exportieren lassen → Export einlesen.
+     * Braucht in Gadgetbridge die aktivierte Intent-API und eine bereits gewählte Exportdatei.
+     */
+    fun refreshFromWatch() {
+        if (_state.value.busy != null) return
         viewModelScope.launch {
-            val (uriStr, known) = db.use { Repo.getSetting(it, "export_uri") to (Repo.getSetting(it, "export_modified").toLongOrNull() ?: 0L) }
-            if (uriStr.isEmpty()) return@launch
-            val uri = Uri.parse(uriStr)
-            val modified = lastModified(uri) ?: return@launch
-            if (modified <= known) return@launch
-            if (runImport(quietStart = true) { dst -> copyUri(uri, dst) }) {
-                db.use { Repo.setSetting(it, "export_modified", modified.toString()) }
+            val hasExport = db.use { Repo.getSetting(it, "export_uri") }.isNotEmpty()
+            if (!hasExport) {
+                _state.update { it.copy(notice = Notice(false, "Wähle zuerst die Exportdatei von Gadgetbridge")) }
+                return@launch
+            }
+            val link = GadgetbridgeLink(getApplication())
+            _state.update { it.copy(busy = ImportProgress("Uhr synchronisieren", 0.1f), notice = null) }
+            val sync = link.syncWatch()
+            _state.update { it.copy(busy = ImportProgress("Gadgetbridge exportiert", 0.5f)) }
+            val export = link.exportDatabase()
+            _state.update { it.copy(busy = null) }
+            when (export) {
+                GadgetbridgeLink.Result.OK -> {
+                    val ok = importWatchedExport(force = true)
+                    if (ok && sync == GadgetbridgeLink.Result.TIMEOUT) {
+                        _state.update { it.copy(notice = Notice(true, "Export eingelesen, die Uhr hat aber nicht geantwortet (verbunden?)")) }
+                    }
+                }
+                GadgetbridgeLink.Result.FAILED ->
+                    _state.update { it.copy(notice = Notice(false, "Gadgetbridge konnte nicht exportieren")) }
+                GadgetbridgeLink.Result.TIMEOUT ->
+                    _state.update {
+                        it.copy(notice = Notice(false, "Keine Antwort von Gadgetbridge. In Gadgetbridge unter Entwickleroptionen die Intent API aktivieren."))
+                    }
             }
         }
     }

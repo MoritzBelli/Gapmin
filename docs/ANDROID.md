@@ -38,7 +38,7 @@ cd android
 
 1. APK aus dem GitHub-Release herunterladen und installieren (Installation aus unbekannten Quellen für den Browser erlauben).
 2. In Gadgetbridge: Einstellungen → Automatisierungen → **Auto-Export (ZIP)** aktivieren, z. B. alle 3 Stunden.
-3. In Gapmin unter **Daten → Export wählen** die ZIP-Datei wählen. Gapmin merkt sich die Datei und übernimmt bei jedem Öffnen der App automatisch neue Daten, wenn Gadgetbridge sie neu geschrieben hat. Alternativ eine Exportdatei in einer anderen App mit „Öffnen mit“ oder „Teilen“ an Gapmin geben.
+3. In Gapmin unter **Daten → Export wählen** die ZIP-Datei wählen. Gapmin merkt sich die Datei und übernimmt bei jedem Öffnen der App automatisch neue Daten, wenn Gadgetbridge sie neu geschrieben hat. Mit **Daten → Jetzt von der Uhr aktualisieren** stößt Gapmin selbst die Uhr-Synchronisierung und den Export in Gadgetbridge an und liest das Ergebnis sofort ein; dafür in Gadgetbridge unter *Entwickleroptionen* die **Intent API** aktivieren. Alternativ eine Exportdatei in einer anderen App mit „Öffnen mit“ oder „Teilen“ an Gapmin geben.
 4. Optional **NAS-Server** eintragen (`http://<NAS-IP>:8085` + Token). Nach jedem Import synchronisiert die App automatisch, wenn der NAS erreichbar ist.
 
 Die App spricht den NAS per HTTP an (`usesCleartextTraffic`), gedacht für LAN oder WireGuard. Für den Zugriff über das Internet gehört ein Reverse-Proxy mit HTTPS davor.

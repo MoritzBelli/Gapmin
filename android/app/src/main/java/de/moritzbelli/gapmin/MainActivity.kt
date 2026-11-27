@@ -31,6 +31,7 @@ class MainActivity : ComponentActivity() {
         val actions = DataActions(
             importUri = { vm.importUri(it, remember = true) },
             importDemo = vm::importDemo,
+            refresh = vm::refreshFromWatch,
             forgetExport = vm::forgetWatchedExport,
             saveNas = vm::saveNas,
             sync = { vm.syncNow() },

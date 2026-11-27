@@ -42,7 +42,7 @@ class ScreenshotTest {
         UiState(loaded = true, runs = Repo.listRuns(db), nights = Repo.listNights(db), days = Health.listDays(db, 100_000), stats = Repo.stats(db))
     }
 
-    private val actions = DataActions({}, {}, {}, { _, _, _ -> }, {}, {})
+    private val actions = DataActions({}, {}, {}, {}, { _, _, _ -> }, {}, {})
 
     private fun shot(name: String, tab: Tab, run: String? = null) = render(name) {
         GapminApp(state, actions, { _, cb -> cb(emptyList()) }, { d, cb -> cb(Health.daySeries(db, d)) }, {}, initialTab = tab, initialRun = run)

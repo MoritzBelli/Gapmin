@@ -52,6 +52,7 @@ import kotlin.math.roundToInt
 class DataActions(
     val importUri: (android.net.Uri) -> Unit,
     val importDemo: () -> Unit,
+    val refresh: () -> Unit,
     val forgetExport: () -> Unit,
     val saveNas: (String, String, Boolean) -> Unit,
     val sync: () -> Unit,
@@ -105,10 +106,14 @@ fun DataScreen(state: UiState, actions: DataActions, listState: LazyListState, b
                     }
                     Spacer(Modifier.height(G.s3))
                 }
+                if (state.watchedExport != null) {
+                    PillButton("Jetzt von der Uhr aktualisieren", Modifier.fillMaxWidth(), primary = true, enabled = state.busy == null, icon = GIcons.Sync, onClick = actions.refresh)
+                    Spacer(Modifier.height(G.s2))
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(G.s2)) {
                     PillButton(
                         if (state.watchedExport == null) "Export wählen" else "Andere Datei",
-                        Modifier.weight(1f), primary = true, enabled = state.busy == null, icon = GIcons.Import,
+                        Modifier.weight(1f), primary = state.watchedExport == null, enabled = state.busy == null, icon = GIcons.Import,
                     ) { picker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*")) }
                     PillButton("Demo-Daten", Modifier.weight(1f), enabled = state.busy == null, onClick = actions.importDemo)
                 }
