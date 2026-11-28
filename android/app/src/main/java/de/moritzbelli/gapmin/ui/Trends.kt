@@ -83,12 +83,12 @@ private fun buckets(pts: List<Pair<Long, Double>>, monthly: Boolean): List<Bucke
 /** Distance between two monthly means above which the history has a hole (more than one missing month). */
 private const val GAP_DAYS = 50.0
 
-private val RANGES = listOf(90 to "3 M", 180 to "6 M", 365 to "1 J", 0 to "Alles")
+private val RANGES = listOf(30 to "1 M", 90 to "3 M", 180 to "6 M", 365 to "1 J", 0 to "Alles")
 
 /**
  * Long-term trends of one metric, built for a narrow screen.
  *
- * The visible window (3 M, 6 M, 1 J or all) is aggregated so that about 15–50 marks cross the screen at any zoom:
+ * The visible window (1 M, 3 M, 6 M, 1 J or all) is aggregated so that about 15–50 marks cross the screen at any zoom:
  * up to 3 months weekly means ± 1 SD with the daily dots, up to a year weekly means with min–max whiskers,
  * beyond that monthly means. A minimap of the whole history below the chart shows where the window sits and moves it
  * (tap or drag). Below: linear trend with 95 % CI and a comparison of consecutive blocks (Cohen's d).
