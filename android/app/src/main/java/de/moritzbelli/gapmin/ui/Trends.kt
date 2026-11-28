@@ -167,42 +167,33 @@ fun <T> TrendsCard(
         Segmented(RANGES, range, { range = it; endBack = 0; cursor = null }, Modifier.fillMaxWidth())
         Spacer(Modifier.height(G.s4))
 
-        if (pts.size < 8 || bks.size < 2) {
-            // keep the layout identical to the chart case so the minimap does not jump under the finger while dragging through a gap
-            Text(
-                "${dayText(winStart)}–${dayText(winEnd)} · n ${pts.size}",
-                style = T.unit, color = G.text3, maxLines = 1, modifier = Modifier.padding(bottom = G.s2),
-            )
-            Box(Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) {
-                Text(
-                    if (pts.isEmpty()) "Keine Daten in diesem Zeitraum (Lücke in der Aufzeichnung)." else "Zu wenige Werte für einen Trend (mind. 8 Messungen im Zeitraum).",
-                    style = T.sm, color = G.text3,
-                )
-            }
-            if (maxBack > 0 || back > 0) {
-                Spacer(Modifier.height(G.s3))
-                WindowNavigator(overview, oldest, ref, winStart, winEnd, def.color, back > 0, { endBack = 0; cursor = null }) { center ->
-                    endBack = (ref - (center + win / 2.0)).roundToInt().coerceIn(0, maxBack); cursor = null
-                }
-            }
-            return@GCard
-        }
-
-        val shown = cursor ?: bks.lastIndex
-        val c = bks[shown.coerceIn(0, bks.lastIndex)]
-        val span = if (monthly) monthText(c.from) else "${dayText(c.from)}–${dayText(c.to)}"
+        // header line, chart (or empty note) and minimap always sit at the same place in the composition,
+        // so dragging the minimap through a gap neither jumps nor cancels the gesture
+        val c = bks.getOrNull((cursor ?: bks.lastIndex).coerceIn(0, (bks.size - 1).coerceAtLeast(0)))
         Text(
-            "$span · n ${c.n} · Ø ${def.fmt(c.mean)}${c.sd?.let { " ± ${def.fmtSpread(it)}" } ?: ""} ${def.unitLabel}",
+            if (c == null) "${dayText(winStart)}–${dayText(winEnd)} · n 0"
+            else "${if (monthly) monthText(c.from) else "${dayText(c.from)}–${dayText(c.to)}"} · n ${c.n} · Ø ${def.fmt(c.mean)}${c.sd?.let { " ± ${def.fmtSpread(it)}" } ?: ""} ${def.unitLabel}",
             style = T.unit, color = if (cursor != null) G.text1 else G.text3, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(bottom = G.s2),
         )
-        TrendCanvas(def, pts, bks, trend, cursor, winStart, winEnd, dots, win > 200) { cursor = it }
+        if (pts.isEmpty()) {
+            Box(Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) {
+                Text("Keine Daten in diesem Zeitraum (Lücke in der Aufzeichnung).", style = T.sm, color = G.text3)
+            }
+        } else {
+            TrendCanvas(def, pts, bks, trend, cursor, winStart, winEnd, dots, win > 200) { cursor = it }
+        }
 
         if (maxBack > 0 || back > 0) {
             Spacer(Modifier.height(G.s3))
             WindowNavigator(overview, oldest, ref, winStart, winEnd, def.color, back > 0, { endBack = 0; cursor = null }) { center ->
                 endBack = (ref - (center + win / 2.0)).roundToInt().coerceIn(0, maxBack); cursor = null
             }
+        }
+        if (pts.size < 8) {
+            Spacer(Modifier.height(G.s3))
+            Text("Trend und Kennzahlen ab 8 Messungen im Zeitraum.", style = T.sm, color = G.text3)
+            return@GCard
         }
 
         // key figures
@@ -380,19 +371,19 @@ private fun TrendCanvas(
         Modifier
             .fillMaxWidth()
             .height(150.dp)
-            .pointerInput(bks) {
+            .pointerInput(bks, d0, d1) {
                 val left = 34.dp.toPx()
                 fun nearest(x: Float): Int {
                     val day = d0 + ((x - left) / (size.width - left - 4.dp.toPx())).coerceIn(0f, 1f) * (d1 - d0)
-                    return bks.indices.minBy { abs(bks[it].day - day) }
+                    return bks.indices.minByOrNull { abs(bks[it].day - day) } ?: 0
                 }
                 detectTapGestures(onTap = { o -> val i = nearest(o.x); setCursor(if (curNow == i) null else i) })
             }
-            .pointerInput(bks) {
+            .pointerInput(bks, d0, d1) {
                 val left = 34.dp.toPx()
                 fun nearest(x: Float): Int {
                     val day = d0 + ((x - left) / (size.width - left - 4.dp.toPx())).coerceIn(0f, 1f) * (d1 - d0)
-                    return bks.indices.minBy { abs(bks[it].day - day) }
+                    return bks.indices.minByOrNull { abs(bks[it].day - day) } ?: 0
                 }
                 detectHorizontalDragGestures { ch, _ -> setCursor(nearest(ch.position.x)) }
             },
@@ -438,7 +429,8 @@ private fun TrendCanvas(
             )
         }
         val line = Path()
-        val maxStep = if (bks.size > 1) maxOf(bks.zipWithNext { a, b -> b.day - a.day }.sorted()[bks.size / 2] * 2.5, 10.0) else GAP_DAYS
+        val steps = bks.zipWithNext { a, b -> b.day - a.day }.sorted()
+        val maxStep = if (steps.isNotEmpty()) maxOf(steps[steps.size / 2] * 2.5, 10.0) else GAP_DAYS
         bks.forEachIndexed { i, w -> if (i == 0 || w.day - bks[i - 1].day > maxStep) line.moveTo(x(w.day), y(w.mean)) else line.lineTo(x(w.day), y(w.mean)) }
         drawPath(line, def.color.copy(alpha = 0.18f), style = Stroke(5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
         drawPath(line, def.color, style = Stroke(1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
