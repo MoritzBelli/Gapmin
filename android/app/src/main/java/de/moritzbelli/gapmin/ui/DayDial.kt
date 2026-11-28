@@ -12,7 +12,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -117,7 +119,7 @@ private fun bins(xs: List<Sample>, start: Long, n: Int = 144): Array<Double?> {
 /**
  * 24-hour chronogram of one day, midnight at the top, clockwise. Rings from outside in: heart rate (radial bars, 10-min means),
  * stress (Garmin categories), Body Battery (polar line) and sleep stages. Today a hand marks the current time.
- * Tap a ring to read the values at that time (long-press and drag to scrub), tap the centre to reset.
+ * Tap a ring to read the values at that time; drag the handle (or hold a finger on the ring briefly, then drag) to scrub without the page scrolling. Tap the centre to reset.
  */
 @Composable
 fun DayDial(date: String, series: DaySeries?, nights: List<SleepNight>, isToday: Boolean, modifier: Modifier = Modifier) {
@@ -139,6 +141,9 @@ fun DayDial(date: String, series: DaySeries?, nights: List<SleepNight>, isToday:
     val haptic = LocalHapticFeedback.current
     val measurer = rememberTextMeasurer()
     val nowMin = if (isToday) ((System.currentTimeMillis() / 1000 - start) / 60f).coerceIn(0f, 1440f) else null
+
+    // where the handle currently sits (reading cursor, otherwise the current time); read from the gesture without restarting it
+    val handleMin by rememberUpdatedState(cursor ?: nowMin)
 
     // values shown in the centre
     val shownMin = cursor ?: nowMin
@@ -172,22 +177,47 @@ fun DayDial(date: String, series: DaySeries?, nights: List<SleepNight>, isToday:
                     detectTapGestures(onTap = { o -> cursor = minuteAt(o) })
                 }
                 .pointerInput(date) {
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = { o ->
-                            val c = Offset(size.width / 2f, size.height / 2f)
+                    // Scrubbing: grab the handle directly, or hold a finger on the ring for a moment. A quick swipe stays a page scroll.
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val c = Offset(size.width / 2f, size.height / 2f)
+                        val r = minOf(size.width, size.height) / 2f - 24.dp.toPx()
+                        fun minuteOf(o: Offset): Float {
                             var a = atan2(o.x - c.x, -(o.y - c.y))
                             if (a < 0) a += (2 * PI).toFloat()
-                            cursor = a / (2 * PI).toFloat() * 1440f
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        },
-                        onDrag = { ch, _ ->
+                            return a / (2 * PI).toFloat() * 1440f
+                        }
+                        if (hypot(down.position.x - c.x, down.position.y - c.y) < r * 0.46f) return@awaitEachGesture // centre: tap resets
+                        val hm = handleMin
+                        val onHandle = hm != null && run {
+                            val a = Math.toRadians((-90f + hm / 1440f * 360f).toDouble())
+                            val tip = Offset(c.x + (r * cos(a)).toFloat(), c.y + (r * sin(a)).toFloat())
+                            (down.position - tip).getDistance() <= 44.dp.toPx()
+                        }
+                        var armed = onHandle
+                        if (!armed) {
+                            val slop = viewConfiguration.touchSlop
+                            val released = withTimeoutOrNull(150L) {
+                                var waiting = true
+                                while (waiting) {
+                                    val ch = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
+                                    if (ch == null || !ch.pressed || (ch.position - down.position).getDistance() > slop) waiting = false
+                                }
+                                false
+                            }
+                            armed = released == null // held still until the timeout
+                        }
+                        if (!armed) return@awaitEachGesture
+                        cursor = minuteOf(down.position)
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        down.consume()
+                        while (true) {
+                            val ch = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                            if (!ch.pressed) break
+                            cursor = minuteOf(ch.position)
                             ch.consume()
-                            val c = Offset(size.width / 2f, size.height / 2f)
-                            var a = atan2(ch.position.x - c.x, -(ch.position.y - c.y))
-                            if (a < 0) a += (2 * PI).toFloat()
-                            cursor = a / (2 * PI).toFloat() * 1440f
-                        },
-                    )
+                        }
+                    }
                 },
         ) {
             val c = center
@@ -321,7 +351,8 @@ fun DayDial(date: String, series: DaySeries?, nights: List<SleepNight>, isToday:
             }
             cursor?.let { m ->
                 drawLine(G.text1.copy(alpha = 0.7f), pt(m, R * 0.46f), pt(m, R * 1.0f), 1.dp.toPx())
-                drawCircle(G.text1, 2.5.dp.toPx(), pt(m, R * 1.0f))
+                drawCircle(G.text1.copy(alpha = 0.18f), 12.dp.toPx(), pt(m, R * 1.0f))
+                drawCircle(G.text1, 5.dp.toPx(), pt(m, R * 1.0f))
             }
         }
 

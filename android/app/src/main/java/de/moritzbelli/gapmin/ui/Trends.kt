@@ -80,16 +80,35 @@ private fun buckets(pts: List<Pair<Long, Double>>, monthly: Boolean): List<Bucke
         Bucket(bucketOf(l.first().first, monthly).second, vs.size, m, sd, vs.min(), vs.max(), l.first().first, l.last().first)
     }
 
+/**
+ * Short windows: one mark per day. Line = trailing 7-day mean, band = its ±1 SD (from 3 values on),
+ * so the spread stays readable down to two weeks. [all] must be sorted by day and may reach before [from].
+ */
+private fun dailyBuckets(all: List<Pair<Long, Double>>, from: Long, to: Long): List<Bucket> {
+    val out = ArrayList<Bucket>()
+    for ((day, _) in all) {
+        if (day < from || day > to) continue
+        val w = all.filter { it.first in (day - 6)..day }.map { it.second }
+        val m = w.average()
+        val sd = if (w.size >= 3) sqrt(w.sumOf { (it - m) * (it - m) } / (w.size - 1)) else null
+        out.add(Bucket(day.toDouble(), w.size, m, sd, w.min(), w.max(), day, day))
+    }
+    return out
+}
+
 /** Distance between two monthly means above which the history has a hole (more than one missing month). */
 private const val GAP_DAYS = 50.0
 
-private val RANGES = listOf(90 to "3 M", 180 to "6 M", 365 to "1 J", 0 to "Alles")
+private val RANGES = listOf(14 to "2 W", 30 to "1 M", 90 to "3 M", 180 to "6 M", 365 to "1 J", 0 to "Alles")
+
+/** Windows up to this many days show one mark per day instead of weekly buckets. */
+private const val DAILY_MAX_WIN = 45
 
 /**
  * Long-term trends of one metric, built for a narrow screen.
  *
- * The visible window (3 M, 6 M, 1 J or all) is aggregated so that about 15–50 marks cross the screen at any zoom:
- * up to 3 months weekly means ± 1 SD with the daily dots, up to a year weekly means with min–max whiskers,
+ * The visible window (2 W, 1 M, 3 M, 6 M, 1 J or all) is aggregated so that about 15–50 marks cross the screen at any zoom:
+ * up to 1 month one mark per day (7-day mean ± 1 SD), up to 3 months weekly means ± 1 SD with the daily dots, up to a year weekly means with min–max whiskers,
  * beyond that monthly means. A minimap of the whole history below the chart shows where the window sits and moves it
  * (tap or drag). Below: linear trend with 95 % CI and a comparison of consecutive blocks (Cohen's d).
  * Items are newest first; windows are counted back from the selected item.
@@ -118,14 +137,17 @@ fun <T> TrendsCard(
     val winEnd = ref - back
     val winStart = (winEnd - win + 1).coerceAtLeast(oldest)
 
-    val pts = remember(hist, def, win, back) {
-        hist.filter { (ref - dayOf(it)).toInt() in back until back + win }
-            .mapNotNull { x -> def.get(x)?.takeIf { it.isFinite() }?.let { dayOf(x) to it } }
-            .sortedBy { it.first }
+    val allPts = remember(hist, def) {
+        hist.mapNotNull { x -> def.get(x)?.takeIf { it.isFinite() }?.let { dayOf(x) to it } }.sortedBy { it.first }
     }
+    val pts = remember(allPts, win, back) { allPts.filter { (ref - it.first).toInt() in back until back + win } }
     val dots = win <= 120
     val monthly = win > 400
-    val bks = remember(pts, monthly) { buckets(pts, monthly) }
+    val daily = win <= DAILY_MAX_WIN
+    val minPts = if (daily) 5 else 8
+    val bks = remember(allPts, pts, monthly, daily, winStart, winEnd) {
+        if (daily) dailyBuckets(allPts, winStart, winEnd) else buckets(pts, monthly)
+    }
     val trend = remember(pts) { Stat.trend(pts.map { it.first.toDouble() to it.second }) }
     val desc = remember(pts) { Stat.desc(pts.map { it.second }) }
     val nBlocks = if (win >= 120) 4 else 3
@@ -138,14 +160,13 @@ fun <T> TrendsCard(
             )
         }
     }
-    val overview = remember(hist, def) {
-        buckets(hist.mapNotNull { x -> def.get(x)?.takeIf { it.isFinite() }?.let { dayOf(x) to it } }.sortedBy { it.first }, monthly = true)
-    }
+    val overview = remember(allPts) { buckets(allPts, monthly = true) }
     var cursor by remember(bks) { mutableStateOf<Int?>(null) }
 
     val info = remember(trend, def) {
         val sig = trend != null && abs(trend.slope) > 1.96 * trend.se
         "Linie: Mittel je Woche (bis 1 Jahr) bzw. je Monat. Bis 3 Monate: Punkte = Tageswerte, Band = ±1 SD der Woche. " +
+            "2 W und 1 M: Linie = gleitendes 7-Tage-Mittel, Band = dessen ±1 SD (Streuung), Punkte = Tageswerte. " +
             "Darüber: feine Striche = Minimum bis Maximum je Woche bzw. Monat. Gestrichelt: linearer Trend.\n\n" +
             "Zeitfenster: Der kleine Gesamtverlauf unter dem Diagramm zeigt die ganze Historie als Monatsmittel, das helle Fenster darin den " +
             "gezeigten Ausschnitt. Antippen oder Ziehen verschiebt ihn, „Jetzt“ springt zurück. Im Diagramm liest Tippen oder Ziehen Werte ab.\n\n" +
@@ -167,7 +188,7 @@ fun <T> TrendsCard(
         Segmented(RANGES, range, { range = it; endBack = 0; cursor = null }, Modifier.fillMaxWidth())
         Spacer(Modifier.height(G.s4))
 
-        if (pts.size < 8 || bks.size < 2) {
+        if (pts.size < minPts || bks.size < 2) {
             // keep the layout identical to the chart case so the minimap does not jump under the finger while dragging through a gap
             Text(
                 "${dayText(winStart)}–${dayText(winEnd)} · n ${pts.size}",
@@ -175,7 +196,7 @@ fun <T> TrendsCard(
             )
             Box(Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) {
                 Text(
-                    if (pts.isEmpty()) "Keine Daten in diesem Zeitraum (Lücke in der Aufzeichnung)." else "Zu wenige Werte für einen Trend (mind. 8 Messungen im Zeitraum).",
+                    if (pts.isEmpty()) "Keine Daten in diesem Zeitraum (Lücke in der Aufzeichnung)." else "Zu wenige Werte für einen Trend (mind. $minPts Messungen im Zeitraum).",
                     style = T.sm, color = G.text3,
                 )
             }
@@ -190,7 +211,11 @@ fun <T> TrendsCard(
 
         val shown = cursor ?: bks.lastIndex
         val c = bks[shown.coerceIn(0, bks.lastIndex)]
-        val span = if (monthly) monthText(c.from) else "${dayText(c.from)}–${dayText(c.to)}"
+        val span = when {
+            daily -> "${dayText(c.from)} · 7 T"
+            monthly -> monthText(c.from)
+            else -> "${dayText(c.from)}–${dayText(c.to)}"
+        }
         Text(
             "$span · n ${c.n} · Ø ${def.fmt(c.mean)}${c.sd?.let { " ± ${def.fmtSpread(it)}" } ?: ""} ${def.unitLabel}",
             style = T.unit, color = if (cursor != null) G.text1 else G.text3, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -384,7 +409,7 @@ private fun TrendCanvas(
                 val left = 34.dp.toPx()
                 fun nearest(x: Float): Int {
                     val day = d0 + ((x - left) / (size.width - left - 4.dp.toPx())).coerceIn(0f, 1f) * (d1 - d0)
-                    return bks.indices.minBy { abs(bks[it].day - day) }
+                    return bks.indices.minByOrNull { abs(bks[it].day - day) } ?: 0
                 }
                 detectTapGestures(onTap = { o -> val i = nearest(o.x); setCursor(if (curNow == i) null else i) })
             }
@@ -392,7 +417,7 @@ private fun TrendCanvas(
                 val left = 34.dp.toPx()
                 fun nearest(x: Float): Int {
                     val day = d0 + ((x - left) / (size.width - left - 4.dp.toPx())).coerceIn(0f, 1f) * (d1 - d0)
-                    return bks.indices.minBy { abs(bks[it].day - day) }
+                    return bks.indices.minByOrNull { abs(bks[it].day - day) } ?: 0
                 }
                 detectHorizontalDragGestures { ch, _ -> setCursor(nearest(ch.position.x)) }
             },
@@ -423,7 +448,8 @@ private fun TrendCanvas(
                 p.close()
                 drawPath(p, def.color.copy(alpha = 0.10f))
             }
-            for ((day, v) in pts) drawCircle(G.text3.copy(alpha = 0.7f), 1.5.dp.toPx(), Offset(x(day.toDouble()), y(v)))
+            val dotR = if (d1 - d0 <= DAILY_MAX_WIN) 2.5.dp else 1.5.dp
+            for ((day, v) in pts) drawCircle(G.text3.copy(alpha = 0.7f), dotR.toPx(), Offset(x(day.toDouble()), y(v)))
         } else {
             // long windows: min–max whisker per bucket instead of hundreds of dots
             for (b in bks) if (b.n >= 2) drawLine(def.color.copy(alpha = 0.28f), Offset(x(b.day), y(b.max)), Offset(x(b.day), y(b.min)), 1.4.dp.toPx(), cap = StrokeCap.Round)
@@ -438,7 +464,9 @@ private fun TrendCanvas(
             )
         }
         val line = Path()
-        val maxStep = if (bks.size > 1) maxOf(bks.zipWithNext { a, b -> b.day - a.day }.sorted()[bks.size / 2] * 2.5, 10.0) else GAP_DAYS
+        // median step between buckets; with only two buckets there is exactly one step (index bks.size / 2 used to run out of bounds)
+        val steps = bks.zipWithNext { a, b -> b.day - a.day }.sorted()
+        val maxStep = if (steps.isNotEmpty()) maxOf(steps[steps.size / 2] * 2.5, 10.0) else GAP_DAYS
         bks.forEachIndexed { i, w -> if (i == 0 || w.day - bks[i - 1].day > maxStep) line.moveTo(x(w.day), y(w.mean)) else line.lineTo(x(w.day), y(w.mean)) }
         drawPath(line, def.color.copy(alpha = 0.18f), style = Stroke(5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
         drawPath(line, def.color, style = Stroke(1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
